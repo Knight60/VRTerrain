@@ -1,5 +1,7 @@
 export const TERRAIN_CONFIG = {
-    // Zoom Levels
+
+    SOURCE_TEXT: "AWS Terrain Tiles (SRTM)",
+    TERRAIN_TILE_URL: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
     DEM_ZOOM_LEVEL: 15, // For elevation data (max 15 for AWS SRTM)
 
     // Map Extent: Latitude and Longitude bounds of the target area
@@ -20,13 +22,13 @@ export const TERRAIN_CONFIG = {
      },
      /**/
     // Target Area Display (for UI)
-    SOURCE_TEXT: "AWS Terrain Tiles (SRTM)",
-
     // Default Shape: 'rectangle' or 'ellipse'
     DEFAULT_SHAPE: 'rectangle',
 
     // Soil Profile Depth (in meters) from the lowest point
-    SOIL_DEPTH_METERS: 20,
+    // Soil Profile Depth
+    SOIL_DEPTH_VALUE: 10,
+    SOIL_DEPTH_UNIT: 'percent', // 'meters' or 'percent' of shortest bounds width
 
     // Visual Effects (Unreal Engine Style)
     EFFECTS: {
@@ -38,6 +40,8 @@ export const TERRAIN_CONFIG = {
     // Display Options
     SHOW_SOIL_PROFILE: true,
     SHOW_TERRAIN_SHADOW: true,
+    SHADOW_DISTANCE_VALUE: 20, // Distance of shadow from terrain base
+    SHADOW_DISTANCE_UNIT: 'percent', // 'meters' or 'percent' of shortest bounds width
 
     // Background Image
     BACKGROUND_IMAGE: '/background/studio_background.png', // Set to null or empty string to disable
@@ -47,7 +51,7 @@ export const TERRAIN_CONFIG = {
     EXAGGERATION: {
         DEFAULT: 200,
         MIN: 10,
-        MAX: 500
+        MAX: 1000
     },
 
     // Color Palettes

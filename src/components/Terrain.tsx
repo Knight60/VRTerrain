@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { fetchTerrainTile } from '../utils/terrain';
+import { fetchTerrainTile, calculateBoundsDimensions } from '../utils/terrain';
 import { TERRAIN_CONFIG } from '../config';
 
 interface TerrainProps {
@@ -272,10 +272,16 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
 
         geo.computeVertexNormals();
 
+        // Calculate Soil Depth
+        const dimensions = calculateBoundsDimensions(TERRAIN_CONFIG.BOUNDS);
+        const soilDepthMeters = TERRAIN_CONFIG.SOIL_DEPTH_UNIT === 'percent'
+            ? dimensions.minDimension * (TERRAIN_CONFIG.SOIL_DEPTH_VALUE / 100)
+            : TERRAIN_CONFIG.SOIL_DEPTH_VALUE;
+
         // --- Side Walls (Rectangle Only) ---
         const sides: THREE.BufferGeometry[] = [];
         if (shape === 'rectangle') {
-            const baseDepth = -TERRAIN_CONFIG.SOIL_DEPTH_METERS * currentMultiplier;
+            const baseDepth = -soilDepthMeters * currentMultiplier;
             const halfSize = 50;
 
             const generateWall = (edge: 'N' | 'S' | 'W' | 'E') => {
@@ -398,7 +404,7 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
             sides.push(generateWall('W'));
             sides.push(generateWall('E'));
         } else if (shape === 'ellipse') {
-            const baseDepth = -TERRAIN_CONFIG.SOIL_DEPTH_METERS * currentMultiplier;
+            const baseDepth = -soilDepthMeters * currentMultiplier;
             const R = 49.6; // Slightly less than 50 to match mask (254/512 approx)
             const segments = 128; // Smoothness
 

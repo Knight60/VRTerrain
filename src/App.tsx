@@ -5,6 +5,7 @@ import { OrbitControls, Sky, Environment, Stars } from '@react-three/drei'
 import { Terrain } from './components/Terrain'
 import { CameraTracker } from './components/CameraTracker'
 import { TERRAIN_CONFIG } from './config'
+import { calculateBoundsDimensions } from './utils/terrain'
 import * as THREE from 'three'
 
 function App() {
@@ -271,10 +272,25 @@ function App() {
 
                     {/* Shadow Plane */}
                     {showTerrainShadow && (() => {
-                        // Calculate shadow position (2x soil depth below terrain base)
+                        // Calculate shadow position
+                        // Logic: Shadow is below the soil base (-SOIL_DEPTH_METERS)
+                        // Distance (Gap) = SHADOW_DISTANCE_PERCENT * Shortest_Bounds_Width_Meters
+
+                        const dimensions = calculateBoundsDimensions(TERRAIN_CONFIG.BOUNDS);
+                        const gapMeters = TERRAIN_CONFIG.SHADOW_DISTANCE_UNIT === 'percent'
+                            ? dimensions.minDimension * (TERRAIN_CONFIG.SHADOW_DISTANCE_VALUE / 100)
+                            : TERRAIN_CONFIG.SHADOW_DISTANCE_VALUE;
+
                         const baseMultiplier = 0.01;
                         const currentMultiplier = baseMultiplier * (exaggeration / 100);
-                        const shadowY = -2 * TERRAIN_CONFIG.SOIL_DEPTH_METERS * currentMultiplier;
+
+                        // Soil Depth calculation
+                        const soilDepthMeters = TERRAIN_CONFIG.SOIL_DEPTH_UNIT === 'percent'
+                            ? dimensions.minDimension * (TERRAIN_CONFIG.SOIL_DEPTH_VALUE / 100)
+                            : TERRAIN_CONFIG.SOIL_DEPTH_VALUE;
+
+                        // Shadow Y position in World Space
+                        const shadowY = -(soilDepthMeters + gapMeters) * currentMultiplier;
 
                         // Create blurred alpha map for shadow
                         const createShadowAlpha = () => {
