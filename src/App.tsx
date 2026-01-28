@@ -272,7 +272,7 @@ function App() {
                     {/* Shadow Plane */}
                     {showTerrainShadow && (() => {
                         // Calculate shadow position (2x soil depth below terrain base)
-                        const baseMultiplier = 0.15;
+                        const baseMultiplier = 0.01;
                         const currentMultiplier = baseMultiplier * (exaggeration / 100);
                         const shadowY = -2 * TERRAIN_CONFIG.SOIL_DEPTH_METERS * currentMultiplier;
 

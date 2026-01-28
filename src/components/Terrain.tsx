@@ -564,8 +564,9 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
     }, [terrainData, paletteColors, visibleRange, shape, baseMapTexture]);
 
     // Calculate dynamic Z-scale based on exaggeration
-    // baseMultiplier was 0.15 in the original code
-    const zScale = 0.15 * (exaggeration / 100);
+    // User requirement: Range (1000m) -> 10% of width (10 units).
+    // Factor = 10 / 1000 = 0.01
+    const zScale = 0.01 * (exaggeration / 100);
 
     const alphaMap = useMemo(() => {
         if (shape === 'rectangle') return null;
