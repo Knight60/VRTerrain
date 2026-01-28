@@ -266,9 +266,8 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
         geo.setAttribute('heightData', new THREE.BufferAttribute(heightData, 1));
 
         const heightRange = visibleMax - visibleMin || 1;
-        // Generate geometry with normalized height (1.0 scale).
-        // Actual exaggeration is applied via mesh.scale.z to avoid expensive geometry regeneration.
-        const currentMultiplier = 1.0;
+        // Apply exaggeration directly to vertices to separate it from soil depth
+        const currentMultiplier = exaggeration / 100;
 
         for (let i = 0; i < count; i++) {
             // Use DEM data directly without rotation
@@ -288,10 +287,12 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
             ? dimensions.minDimension * (TERRAIN_CONFIG.SOIL_DEPTH_VALUE / 100)
             : TERRAIN_CONFIG.SOIL_DEPTH_VALUE;
 
-        // --- Side Walls (Rectangle Only) ---
+        // Base depth is fixed relative to map width (1:1 scale), unaffected by exaggeration
+        const baseDepth = -soilDepthMeters;
+
         const sides: THREE.BufferGeometry[] = [];
+
         if (shape === 'rectangle') {
-            const baseDepth = -soilDepthMeters * currentMultiplier;
             const halfSize = 50;
 
             const generateWall = (edge: 'N' | 'S' | 'W' | 'E') => {
@@ -407,14 +408,13 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
                 geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
                 geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
                 return geo;
-            }
+            };
 
             sides.push(generateWall('N'));
             sides.push(generateWall('S'));
             sides.push(generateWall('W'));
             sides.push(generateWall('E'));
         } else if (shape === 'ellipse') {
-            const baseDepth = -soilDepthMeters * currentMultiplier;
             const R = 49.6; // Slightly less than 50 to match mask (254/512 approx)
             const segments = 128; // Smoothness
 
@@ -545,7 +545,7 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
         }
 
         return { topGeometry: geo, sideGeometries: sides };
-    }, [terrainData, visibleRange, shape]); // Removed paletteColors & baseMapTexture from dependencies
+    }, [terrainData, visibleRange, shape, exaggeration]); // Exaggeration dependency added
 
     // Effect to handle Appearance Updates (Colors & UVs) directly on the geometry
     useEffect(() => {
@@ -698,13 +698,13 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
                 geometry={topGeometry}
                 receiveShadow
                 castShadow
-                scale={[1, 1, zScale]}
+                scale={[1, 1, baseScale]}
                 visible={!baseMapTexture}
-                onPointerMove={(e) => {
+                onPointerMove={onHover ? (e) => {
                     e.stopPropagation();
                     handlePointerMove(e);
-                }}
-                onPointerOut={() => onHover && onHover(null)}
+                } : undefined}
+                onPointerOut={onHover ? () => onHover(null) : undefined}
             >
                 <meshStandardMaterial
                     vertexColors={true}
@@ -723,13 +723,13 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
                 geometry={topGeometry}
                 receiveShadow
                 castShadow
-                scale={[1, 1, zScale]}
+                scale={[1, 1, baseScale]}
                 visible={!!baseMapTexture}
-                onPointerMove={(e) => {
+                onPointerMove={onHover ? (e) => {
                     e.stopPropagation();
                     handlePointerMove(e);
-                }}
-                onPointerOut={() => onHover && onHover(null)}
+                } : undefined}
+                onPointerOut={onHover ? () => onHover(null) : undefined}
             >
                 <meshStandardMaterial
                     map={baseMapTexture}
@@ -747,7 +747,7 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
             {showSoilProfile && (shape === 'rectangle' || shape === 'ellipse') && sideGeometries.length > 0 && (
                 <>
                     {sideGeometries.map((geo, i) => (
-                        <mesh key={i} geometry={geo} receiveShadow castShadow scale={[1, 1, zScale]}>
+                        <mesh key={i} geometry={geo} receiveShadow castShadow scale={[1, 1, baseScale]}>
                             <meshStandardMaterial map={sedimentTexture} roughness={1} side={THREE.DoubleSide} />
                         </mesh>
                     ))}

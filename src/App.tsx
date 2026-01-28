@@ -94,6 +94,7 @@ function App() {
                                 type="range"
                                 min={TERRAIN_CONFIG.EXAGGERATION.MIN}
                                 max={TERRAIN_CONFIG.EXAGGERATION.MAX}
+                                step={10}
                                 value={exaggeration}
                                 onChange={(e) => setExaggeration(Number(e.target.value))}
                                 className="w-full h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer accent-emerald-400"
@@ -444,7 +445,9 @@ const ShadowPlane = React.memo(({ show, shape, exaggeration }: { show: boolean, 
 
         // Calculate base scale to match Terrain.tsx (100 / Width)
         const baseMultiplier = 100 / dimensions.width;
-        const currentMultiplier = baseMultiplier * (exaggeration / 100);
+        // User requested fixed soil depth/shadow distance regardless of exaggeration
+        // So we use baseMultiplier (1:1 scale) instead of multiplying by exaggeration
+        const currentMultiplier = baseMultiplier;
 
         const soilDepthMeters = TERRAIN_CONFIG.SOIL_DEPTH_UNIT === 'percent'
             ? dimensions.minDimension * (TERRAIN_CONFIG.SOIL_DEPTH_VALUE / 100)

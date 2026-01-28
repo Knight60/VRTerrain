@@ -23,7 +23,7 @@ export const TERRAIN_CONFIG = {
     DEM_MAX_LEVEL: 15, // For elevation data (max 15 for AWS SRTM)
     // Exaggeration Settings
     EXAGGERATION: {
-        DEFAULT: 100,
+        DEFAULT: 200,
         MIN: 10,
         MAX: 1000
     },
