@@ -41,9 +41,33 @@ export const fetchTerrainTile = async (zoom?: number) => {
     // Determine zoom if not provided
     const targetZoom = zoom || calculateOptimalZoom(BOUNDS);
 
+    // Helper to calculate exact pixel coordinates in Mercator projection
+    const getProjectedPixel = (lat: number, lon: number, z: number) => {
+        const n = Math.pow(2, z);
+        const x = n * ((lon + 180) / 360) * 256;
+        const latRad = (lat * Math.PI) / 180;
+        const y = (n * (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI)) / 2 * 256;
+        return { x, y };
+    };
+
     // Calculate tile bounds from BOUNDS
     const minTile = getTileXYZ(BOUNDS.latMax, BOUNDS.lonMin, targetZoom);
     const maxTile = getTileXYZ(BOUNDS.latMin, BOUNDS.lonMax, targetZoom);
+
+    // Calculate exact pixel crop area relative to the topleft of the minTile
+    const topLeftPixel = getProjectedPixel(BOUNDS.latMax, BOUNDS.lonMin, targetZoom);
+    const bottomRightPixel = getProjectedPixel(BOUNDS.latMin, BOUNDS.lonMax, targetZoom);
+
+    // Origin of the composite canvas in world pixel space
+    const originX = minTile.x * 256;
+    const originY = minTile.y * 256;
+
+    // Determine crop window (integer pixels)
+    // We floor/ceil to ensure we cover the bounds, but constrain to the composite size if necessary
+    const cropX = Math.floor(topLeftPixel.x - originX);
+    const cropY = Math.floor(topLeftPixel.y - originY);
+    const cropWidth = Math.ceil(bottomRightPixel.x - originX) - cropX;
+    const cropHeight = Math.ceil(bottomRightPixel.y - originY) - cropY;
 
     const tilesX = maxTile.x - minTile.x + 1;
     const tilesY = maxTile.y - minTile.y + 1;
@@ -95,26 +119,40 @@ export const fetchTerrainTile = async (zoom?: number) => {
     // Extract elevation data from composite canvas
     const imgData = ctx.getImageData(0, 0, compositeWidth, compositeHeight);
     const { data } = imgData;
-    const elevations = new Float32Array(compositeWidth * compositeHeight);
+
+    // Create buffer for ONLY the cropped area
+    const elevations = new Float32Array(cropWidth * cropHeight);
 
     let minH = Infinity;
     let maxH = -Infinity;
 
-    for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        // Mapzen Terrarium format: (r * 256 + g + b / 256) - 32768
-        const meters = (r * 256 + g + b / 256) - 32768;
+    // Iterate over the crop area
+    for (let y = 0; y < cropHeight; y++) {
+        for (let x = 0; x < cropWidth; x++) {
+            // Source coordinates in the full composite image
+            const sy = Math.min(Math.max(cropY + y, 0), compositeHeight - 1); // Clamp for safety
+            const sx = Math.min(Math.max(cropX + x, 0), compositeWidth - 1);
 
-        elevations[i / 4] = meters;
-        if (meters < minH) minH = meters;
-        if (meters > maxH) maxH = meters;
+            const srcIdx = (sy * compositeWidth + sx) * 4;
+
+            const r = data[srcIdx];
+            const g = data[srcIdx + 1];
+            const b = data[srcIdx + 2];
+
+            // Mapzen Terrarium format: (r * 256 + g + b / 256) - 32768
+            const meters = (r * 256 + g + b / 256) - 32768;
+
+            const targetIdx = y * cropWidth + x;
+            elevations[targetIdx] = meters;
+
+            if (meters < minH) minH = meters;
+            if (meters > maxH) maxH = meters;
+        }
     }
 
     return {
-        width: compositeWidth,
-        height: compositeHeight,
+        width: cropWidth,
+        height: cropHeight,
         data: elevations,
         minHeight: minH,
         maxHeight: maxH
