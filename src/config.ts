@@ -27,6 +27,14 @@ export const TERRAIN_CONFIG = {
         TILT_SHIFT: false
     },
 
+    // Display Options
+    SHOW_SOIL_PROFILE: true,
+    SHOW_TERRAIN_SHADOW: true,
+
+    // Background Image
+    BACKGROUND_IMAGE: '/background/studio_background.png', // Set to null or empty string to disable
+    USE_BACKGROUND_IMAGE: true, // Toggle between background image and white background
+
     // Exaggeration Settings
     EXAGGERATION: {
         DEFAULT: 200,

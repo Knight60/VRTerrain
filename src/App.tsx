@@ -13,6 +13,9 @@ function App() {
     const [paletteName, setPaletteName] = React.useState(TERRAIN_CONFIG.DEFAULT_PALETTE);
     const [elevationRange, setElevationRange] = React.useState<{ min: number; max: number } | null>(null);
     const [effects, setEffects] = React.useState(TERRAIN_CONFIG.EFFECTS);
+    const [showSoilProfile, setShowSoilProfile] = React.useState(TERRAIN_CONFIG.SHOW_SOIL_PROFILE);
+    const [showTerrainShadow, setShowTerrainShadow] = React.useState(TERRAIN_CONFIG.SHOW_TERRAIN_SHADOW);
+    const [useBackgroundImage, setUseBackgroundImage] = React.useState(TERRAIN_CONFIG.USE_BACKGROUND_IMAGE);
 
     // Toggle helper
     const toggleEffect = (key: keyof typeof TERRAIN_CONFIG.EFFECTS) => {
@@ -27,7 +30,14 @@ function App() {
     const fogColor = effects.TILT_SHIFT ? '#e8f4ff' : '#dceeff';
 
     return (
-        <div className="relative w-full h-full bg-black">
+        <div
+            className="relative w-full h-full"
+            style={{
+                background: useBackgroundImage && TERRAIN_CONFIG.BACKGROUND_IMAGE
+                    ? `url(${TERRAIN_CONFIG.BACKGROUND_IMAGE}) center/cover`
+                    : '#ffffff',
+            }}
+        >
             {/* UI Overlay */}
             <div className="absolute top-6 left-6 z-10 text-white font-sans pointer-events-none select-none">
                 <h1 className="text-4xl font-bold drop-shadow-lg tracking-tight bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
@@ -46,8 +56,8 @@ function App() {
                                 <button
                                     onClick={() => setShape('rectangle')}
                                     className={`px - 3 py - 1 rounded - md text - xs font - medium transition - colors border ${shape === 'rectangle'
-                                            ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                                            : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                                        : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
                                         } `}
                                 >
                                     Rectangle
@@ -55,8 +65,8 @@ function App() {
                                 <button
                                     onClick={() => setShape('ellipse')}
                                     className={`px - 3 py - 1 rounded - md text - xs font - medium transition - colors border ${shape === 'ellipse'
-                                            ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                                            : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                                        : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
                                         } `}
                                 >
                                     Ellipse
@@ -97,8 +107,8 @@ function App() {
                                             setPaletteData(colors);
                                         }}
                                         className={`p - 2 rounded - md border text - left flex flex - col gap - 1 transition - colors ${paletteName === key
-                                                ? 'bg-emerald-500/20 border-emerald-500'
-                                                : 'bg-white/5 border-white/10 hover:bg-white/10'
+                                            ? 'bg-emerald-500/20 border-emerald-500'
+                                            : 'bg-white/5 border-white/10 hover:bg-white/10'
                                             } `}
                                     >
                                         <span className={`text - xs font - medium ${paletteName === key ? 'text-emerald-300' : 'text-gray-400'} `}>
@@ -146,6 +156,39 @@ function App() {
                                 </label>
                             </div>
                         </div>
+
+                        <div>
+                            <p className="font-semibold text-emerald-300 mb-2">Display Options:</p>
+                            <div className="flex flex-col gap-2">
+                                <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer hover:text-white transition-colors">
+                                    <input
+                                        type="checkbox"
+                                        checked={showSoilProfile}
+                                        onChange={() => setShowSoilProfile(!showSoilProfile)}
+                                        className="accent-emerald-500"
+                                    />
+                                    Soil Profile (Cross-Section)
+                                </label>
+                                <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer hover:text-white transition-colors">
+                                    <input
+                                        type="checkbox"
+                                        checked={showTerrainShadow}
+                                        onChange={() => setShowTerrainShadow(!showTerrainShadow)}
+                                        className="accent-emerald-500"
+                                    />
+                                    Terrain Shadow
+                                </label>
+                                <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer hover:text-white transition-colors">
+                                    <input
+                                        type="checkbox"
+                                        checked={useBackgroundImage}
+                                        onChange={() => setUseBackgroundImage(!useBackgroundImage)}
+                                        className="accent-emerald-500"
+                                    />
+                                    Studio Background
+                                </label>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -156,11 +199,18 @@ function App() {
                 dpr={[1, 2]}
                 gl={{
                     toneMapping: THREE.ACESFilmicToneMapping,
-                    toneMappingExposure: effects.BLOOM ? 1.2 : 1.0
+                    toneMappingExposure: effects.BLOOM ? 1.2 : 1.0,
+                    alpha: true,
+                    premultipliedAlpha: false,
+                    antialias: true
                 }}
+                onCreated={({ gl }) => {
+                    gl.setClearColor(0x000000, 0); // Fully transparent
+                }}
+                style={{ background: 'transparent' }}
             >
                 {/* Atmosphere & Lighting */}
-                <fog attach="fog" args={[fogColor, fogNear, fogFar]} />
+                {/* <fog attach="fog" args={[fogColor, fogNear, fogFar]} /> */}
                 <ambientLight intensity={ambientIntensity} />
                 <directionalLight
                     position={[100, 100, 50]}
@@ -168,6 +218,12 @@ function App() {
                     castShadow
                     shadow-mapSize-width={2048}
                     shadow-mapSize-height={2048}
+                    shadow-camera-left={-100}
+                    shadow-camera-right={100}
+                    shadow-camera-top={100}
+                    shadow-camera-bottom={-100}
+                    shadow-camera-near={0.5}
+                    shadow-camera-far={500}
                     shadow-bias={-0.0001}
                 />
                 {effects.BLOOM && (
@@ -180,16 +236,108 @@ function App() {
                         exaggeration={exaggeration}
                         paletteColors={paletteData}
                         onHeightRangeChange={(min, max) => setElevationRange({ min, max })}
+                        showSoilProfile={showSoilProfile}
                     />
-                    <Environment preset="forest" />
-                    <Sky
+
+                    {/* Shadow Plane */}
+                    {showTerrainShadow && (() => {
+                        // Calculate shadow position (2x soil depth below terrain base)
+                        const baseMultiplier = 0.15;
+                        const currentMultiplier = baseMultiplier * (exaggeration / 100);
+                        const shadowY = -2 * TERRAIN_CONFIG.SOIL_DEPTH_METERS * currentMultiplier;
+
+                        // Create blurred alpha map for shadow
+                        const createShadowAlpha = () => {
+                            const canvas = document.createElement('canvas');
+                            canvas.width = 512;
+                            canvas.height = 512;
+                            const ctx = canvas.getContext('2d');
+                            if (!ctx) return null;
+
+                            if (shape === 'ellipse') {
+                                // Ellipse with very soft gradient edges (5x softer)
+                                const gradient = ctx.createRadialGradient(256, 256, 100, 256, 256, 256);
+                                gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+                                gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.9)');
+                                gradient.addColorStop(0.75, 'rgba(255, 255, 255, 0.5)');
+                                gradient.addColorStop(0.9, 'rgba(255, 255, 255, 0.2)');
+                                gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                                ctx.fillStyle = gradient;
+                                ctx.fillRect(0, 0, 512, 512);
+                            } else {
+                                // Rectangle: Fill entire canvas first
+                                ctx.fillStyle = '#FFFFFF';
+                                ctx.fillRect(0, 0, 512, 512);
+
+                                // Create very soft blur effect on edges (250px = 5x original 50px)
+                                const edgeBlur = 250;
+
+                                // Top edge
+                                const gradTop = ctx.createLinearGradient(0, 0, 0, edgeBlur);
+                                gradTop.addColorStop(0, 'rgba(0, 0, 0, 1)');  // Transparent at edge
+                                gradTop.addColorStop(1, 'rgba(0, 0, 0, 0)');  // Opaque inside
+                                ctx.globalCompositeOperation = 'destination-out';
+                                ctx.fillStyle = gradTop;
+                                ctx.fillRect(0, 0, 512, edgeBlur);
+
+                                // Bottom edge
+                                const gradBottom = ctx.createLinearGradient(0, 512 - edgeBlur, 0, 512);
+                                gradBottom.addColorStop(0, 'rgba(0, 0, 0, 0)');
+                                gradBottom.addColorStop(1, 'rgba(0, 0, 0, 1)');
+                                ctx.fillStyle = gradBottom;
+                                ctx.fillRect(0, 512 - edgeBlur, 512, edgeBlur);
+
+                                // Left edge
+                                const gradLeft = ctx.createLinearGradient(0, 0, edgeBlur, 0);
+                                gradLeft.addColorStop(0, 'rgba(0, 0, 0, 1)');
+                                gradLeft.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                                ctx.fillStyle = gradLeft;
+                                ctx.fillRect(0, 0, edgeBlur, 512);
+
+                                // Right edge
+                                const gradRight = ctx.createLinearGradient(512 - edgeBlur, 0, 512, 0);
+                                gradRight.addColorStop(0, 'rgba(0, 0, 0, 0)');
+                                gradRight.addColorStop(1, 'rgba(0, 0, 0, 1)');
+                                ctx.fillStyle = gradRight;
+                                ctx.fillRect(512 - edgeBlur, 0, edgeBlur, 512);
+
+                                ctx.globalCompositeOperation = 'source-over';
+                            }
+
+                            const tex = new THREE.CanvasTexture(canvas);
+                            tex.needsUpdate = true;
+                            return tex;
+                        };
+
+                        const alphaMap = createShadowAlpha();
+
+                        return (
+                            <mesh
+                                rotation={[-Math.PI / 2, 0, 0]}
+                                position={[0, shadowY, 0]}
+                                receiveShadow
+                            >
+                                <planeGeometry args={[100, 100]} />
+                                <meshBasicMaterial
+                                    color="#000000"
+                                    alphaMap={alphaMap}
+                                    transparent={true}
+                                    opacity={0.3}
+                                    depthWrite={false}
+                                />
+                            </mesh>
+                        );
+                    })()}
+                    <Environment preset="forest" background={false} />
+                    {/* Sky component creates background - disabled to show custom image */}
+                    {/* <Sky
                         distance={450000}
                         sunPosition={[100, 40, 50]}
                         inclination={0}
                         azimuth={0.25}
                         turbidity={effects.TILT_SHIFT ? 5 : 10}
                         rayleigh={effects.TILT_SHIFT ? 3 : 2}
-                    />
+                    /> */}
                 </Suspense>
 
                 <OrbitControls

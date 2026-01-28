@@ -7,6 +7,7 @@ interface TerrainProps {
     shape: 'rectangle' | 'ellipse';
     exaggeration: number;
     paletteColors: string[];
+    showSoilProfile?: boolean;
 }
 
 // Helper to convert hex to rgb
@@ -79,7 +80,7 @@ const createSedimentTexture = () => {
     return tex;
 };
 
-export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: number, max: number) => void }> = ({ shape, exaggeration = 100, paletteColors, onHeightRangeChange }) => {
+export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: number, max: number) => void }> = ({ shape, exaggeration = 100, paletteColors, onHeightRangeChange, showSoilProfile = true }) => {
     const [terrainData, setTerrainData] = useState<{ width: number; height: number; data: Float32Array; minHeight: number; maxHeight: number } | null>(null);
     const meshRef = useRef<THREE.Group>(null);
     const sedimentTexture = useMemo(() => createSedimentTexture(), []);
@@ -463,7 +464,7 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
             </mesh>
 
             {/* Side Walls */}
-            {(shape === 'rectangle' || shape === 'ellipse') && sideGeometries.length > 0 && (
+            {showSoilProfile && (shape === 'rectangle' || shape === 'ellipse') && sideGeometries.length > 0 && (
                 <>
                     {sideGeometries.map((geo, i) => (
                         <mesh key={i} geometry={geo} receiveShadow castShadow>
