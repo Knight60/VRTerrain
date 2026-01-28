@@ -3,6 +3,7 @@ import React, { Suspense } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Sky, Environment, Stars } from '@react-three/drei'
 import { Terrain } from './components/Terrain'
+import { CameraTracker } from './components/CameraTracker'
 import { TERRAIN_CONFIG } from './config'
 import * as THREE from 'three'
 
@@ -11,11 +12,13 @@ function App() {
     const [exaggeration, setExaggeration] = React.useState(TERRAIN_CONFIG.EXAGGERATION.DEFAULT);
     const [paletteData, setPaletteData] = React.useState<string[]>(TERRAIN_CONFIG.PALETTES[TERRAIN_CONFIG.DEFAULT_PALETTE as keyof typeof TERRAIN_CONFIG.PALETTES]);
     const [paletteName, setPaletteName] = React.useState(TERRAIN_CONFIG.DEFAULT_PALETTE);
+    const [baseMapName, setBaseMapName] = React.useState<string | null>(TERRAIN_CONFIG.DEFAULT_BASE_MAP);
     const [elevationRange, setElevationRange] = React.useState<{ min: number; max: number } | null>(null);
     const [effects, setEffects] = React.useState(TERRAIN_CONFIG.EFFECTS);
     const [showSoilProfile, setShowSoilProfile] = React.useState(TERRAIN_CONFIG.SHOW_SOIL_PROFILE);
     const [showTerrainShadow, setShowTerrainShadow] = React.useState(TERRAIN_CONFIG.SHOW_TERRAIN_SHADOW);
     const [useBackgroundImage, setUseBackgroundImage] = React.useState(TERRAIN_CONFIG.USE_BACKGROUND_IMAGE);
+    const [compassRotation, setCompassRotation] = React.useState(0);
 
     // Toggle helper
     const toggleEffect = (key: keyof typeof TERRAIN_CONFIG.EFFECTS) => {
@@ -105,13 +108,14 @@ function App() {
                                         onClick={() => {
                                             setPaletteName(key);
                                             setPaletteData(colors);
+                                            setBaseMapName(null); // Deselect base map
                                         }}
-                                        className={`p - 2 rounded - md border text - left flex flex - col gap - 1 transition - colors ${paletteName === key
+                                        className={`p-2 rounded-md border text-left flex flex-col gap-1 transition-colors ${paletteName === key && !baseMapName
                                             ? 'bg-emerald-500/20 border-emerald-500'
                                             : 'bg-white/5 border-white/10 hover:bg-white/10'
-                                            } `}
+                                            }`}
                                     >
-                                        <span className={`text - xs font - medium ${paletteName === key ? 'text-emerald-300' : 'text-gray-400'} `}>
+                                        <span className={`text-xs font-medium ${paletteName === key && !baseMapName ? 'text-emerald-300' : 'text-gray-400'}`}>
                                             {key}
                                         </span>
                                         <div className="h-2 w-full rounded-sm overflow-hidden flex">
@@ -119,6 +123,27 @@ function App() {
                                                 <div key={i} style={{ backgroundColor: c }} className="flex-1 h-full" />
                                             ))}
                                         </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div>
+                            <p className="font-semibold text-emerald-300 mb-2">Base Map:</p>
+                            <div className="grid grid-cols-2 gap-2">
+                                {Object.keys(TERRAIN_CONFIG.BASE_MAPS).map((key) => (
+                                    <button
+                                        key={key}
+                                        onClick={() => {
+                                            setBaseMapName(key);
+                                            setPaletteName(''); // Deselect palette
+                                        }}
+                                        className={`px-3 py-2 rounded-md text-xs font-medium transition-colors border text-left ${baseMapName === key
+                                            ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                                            : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                                            }`}
+                                    >
+                                        {key}
                                     </button>
                                 ))}
                             </div>
@@ -212,6 +237,10 @@ function App() {
                 {/* Atmosphere & Lighting */}
                 {/* <fog attach="fog" args={[fogColor, fogNear, fogFar]} /> */}
                 <ambientLight intensity={ambientIntensity} />
+
+                {/* Camera Tracker for Compass */}
+                <CameraTracker onRotationChange={setCompassRotation} />
+
                 <directionalLight
                     position={[100, 100, 50]}
                     intensity={directionalIntensity}
@@ -237,6 +266,7 @@ function App() {
                         paletteColors={paletteData}
                         onHeightRangeChange={(min, max) => setElevationRange({ min, max })}
                         showSoilProfile={showSoilProfile}
+                        baseMapName={baseMapName}
                     />
 
                     {/* Shadow Plane */}
@@ -355,6 +385,46 @@ function App() {
                 <div className="text-white/40 text-xs space-y-1">
                     <p>Powered by Vite + React + Three.js</p>
                     <p>Controls: LMB Rotate | RMB Pan | Scroll Zoom</p>
+                </div>
+            </div>
+
+            {/* North Arrow */}
+            <div className="absolute top-1/2 right-8 z-10 pointer-events-none transform -translate-y-1/2">
+                <div className="relative w-20 h-20 flex items-center justify-center">
+                    {/* Compass Circle */}
+                    <div className="absolute inset-0 rounded-full bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 backdrop-blur-md border-2 border-white/30 shadow-2xl"></div>
+
+                    {/* North Arrow SVG */}
+                    <svg width="60" height="60" viewBox="0 0 60 60" className="relative z-10 drop-shadow-lg" style={{ transform: `rotate(${compassRotation}deg)`, transition: 'transform 0.1s ease-out' }}>
+                        {/* Arrow Shadow */}
+                        <path
+                            d="M 30 10 L 37 35 L 30 32 L 23 35 Z"
+                            fill="rgba(0,0,0,0.3)"
+                            transform="translate(1, 1)"
+                        />
+                        {/* North Arrow (Red) */}
+                        <path
+                            d="M 30 10 L 37 35 L 30 32 Z"
+                            fill="#ef4444"
+                            stroke="#fff"
+                            strokeWidth="0.5"
+                        />
+                        {/* South Arrow (White) */}
+                        <path
+                            d="M 30 32 L 23 35 L 30 10 Z"
+                            fill="#f8fafc"
+                            stroke="#fff"
+                            strokeWidth="0.5"
+                        />
+                        {/* Center Dot */}
+                        <circle cx="30" cy="32" r="3" fill="#1e293b" stroke="#fff" strokeWidth="1" />
+
+                        {/* Cardinal Directions */}
+                        <text x="30" y="8" textAnchor="middle" className="fill-white font-bold text-xs" style={{ fontSize: '10px' }}>N</text>
+                        <text x="52" y="35" textAnchor="middle" className="fill-white/60 font-semibold text-xs" style={{ fontSize: '8px' }}>E</text>
+                        <text x="30" y="55" textAnchor="middle" className="fill-white/60 font-semibold text-xs" style={{ fontSize: '8px' }}>S</text>
+                        <text x="8" y="35" textAnchor="middle" className="fill-white/60 font-semibold text-xs" style={{ fontSize: '8px' }}>W</text>
+                    </svg>
                 </div>
             </div>
         </div>

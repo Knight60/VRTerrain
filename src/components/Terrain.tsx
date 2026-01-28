@@ -8,6 +8,7 @@ interface TerrainProps {
     exaggeration: number;
     paletteColors: string[];
     showSoilProfile?: boolean;
+    baseMapName?: string | null;
 }
 
 // Helper to convert hex to rgb
@@ -80,15 +81,124 @@ const createSedimentTexture = () => {
     return tex;
 };
 
-export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: number, max: number) => void }> = ({ shape, exaggeration = 100, paletteColors, onHeightRangeChange, showSoilProfile = true }) => {
+export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: number, max: number) => void }> = ({ shape, exaggeration = 100, paletteColors, onHeightRangeChange, showSoilProfile = true, baseMapName = null }) => {
     const [terrainData, setTerrainData] = useState<{ width: number; height: number; data: Float32Array; minHeight: number; maxHeight: number } | null>(null);
     const meshRef = useRef<THREE.Group>(null);
     const sedimentTexture = useMemo(() => createSedimentTexture(), []);
 
+    // Helper function to convert lat/lon to tile coordinates
+    const latLonToTile = (lat: number, lon: number, zoom: number) => {
+        const x = Math.floor((lon + 180) / 360 * Math.pow(2, zoom));
+        const y = Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
+        return { x, y, z: zoom };
+    };
+
+    // Load base map texture
+    const [baseMapTexture, setBaseMapTexture] = useState<THREE.Texture | null>(null);
+
     useEffect(() => {
-        // Zoom 14 captures a bit more context, Zoom 15 is finer.
-        fetchTerrainTile(15).then(setTerrainData).catch(console.error);
-    }, []);
+        if (baseMapName && TERRAIN_CONFIG.BASE_MAPS[baseMapName as keyof typeof TERRAIN_CONFIG.BASE_MAPS]) {
+            const urlTemplate = TERRAIN_CONFIG.BASE_MAPS[baseMapName as keyof typeof TERRAIN_CONFIG.BASE_MAPS];
+            const zoom = TERRAIN_CONFIG.BASE_MAP_ZOOM_LEVEL;
+
+            // Calculate tile bounds from BOUNDS (note: latMax goes to minTile.y)
+            const minTile = latLonToTile(TERRAIN_CONFIG.BOUNDS.latMax, TERRAIN_CONFIG.BOUNDS.lonMin, zoom);
+            const maxTile = latLonToTile(TERRAIN_CONFIG.BOUNDS.latMin, TERRAIN_CONFIG.BOUNDS.lonMax, zoom);
+
+            const tilesX = maxTile.x - minTile.x + 1;
+            const tilesY = maxTile.y - minTile.y + 1;
+
+            // Create a canvas to composite all tiles
+            const canvas = document.createElement('canvas');
+            const tileSize = 256;
+            canvas.width = tilesX * tileSize;
+            canvas.height = tilesY * tileSize;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+
+            // Load all tiles
+            let loadedCount = 0;
+            const totalTiles = tilesX * tilesY;
+
+            for (let ty = 0; ty < tilesY; ty++) {
+                for (let tx = 0; tx < tilesX; tx++) {
+                    const tileX = minTile.x + tx;
+                    const tileY = minTile.y + ty;
+
+                    const tileUrl = urlTemplate
+                        .replace('{x}', tileX.toString())
+                        .replace('{y}', tileY.toString())
+                        .replace('{z}', zoom.toString());
+
+                    const img = new Image();
+                    img.crossOrigin = 'anonymous';
+                    img.onload = () => {
+                        ctx.drawImage(img, tx * tileSize, ty * tileSize);
+                        loadedCount++;
+
+                        if (loadedCount === totalTiles) {
+                            // All tiles loaded, calculate precise UV mapping
+                            // Calculate the exact position of BOUNDS within the tile grid
+
+                            // Helper: convert lat/lon to exact pixel position within tile
+                            const latLonToPixel = (lat: number, lon: number, zoom: number) => {
+                                const scale = Math.pow(2, zoom);
+                                const worldX = (lon + 180) / 360 * scale;
+                                const worldY = (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * scale;
+                                return { x: worldX * 256, y: worldY * 256 };
+                            };
+
+                            const minPixel = latLonToPixel(TERRAIN_CONFIG.BOUNDS.latMax, TERRAIN_CONFIG.BOUNDS.lonMin, zoom);
+                            const maxPixel = latLonToPixel(TERRAIN_CONFIG.BOUNDS.latMin, TERRAIN_CONFIG.BOUNDS.lonMax, zoom);
+
+                            // Calculate UV coordinates relative to the composite canvas
+                            const minTilePixelX = minTile.x * 256;
+                            const minTilePixelY = minTile.y * 256;
+
+                            const uMin = (minPixel.x - minTilePixelX) / canvas.width;
+                            const vMin = (minPixel.y - minTilePixelY) / canvas.height;
+                            const uMax = (maxPixel.x - minTilePixelX) / canvas.width;
+                            const vMax = (maxPixel.y - minTilePixelY) / canvas.height;
+
+                            // Create texture
+                            const texture = new THREE.CanvasTexture(canvas);
+                            texture.wrapS = THREE.ClampToEdgeWrapping;
+                            texture.wrapT = THREE.ClampToEdgeWrapping;
+                            texture.minFilter = THREE.LinearFilter;
+                            texture.flipY = true;
+
+                            // Store UV bounds in texture for later use
+                            (texture as any).uvBounds = { uMin, vMin, uMax, vMax };
+
+                            texture.needsUpdate = true;
+                            setBaseMapTexture(texture);
+                        }
+                    };
+                    img.onerror = (error) => {
+                        console.error(`Error loading tile ${tileX},${tileY}:`, error);
+                        loadedCount++;
+                        if (loadedCount === totalTiles) {
+                            const texture = new THREE.CanvasTexture(canvas);
+                            texture.wrapS = THREE.ClampToEdgeWrapping;
+                            texture.wrapT = THREE.ClampToEdgeWrapping;
+                            texture.minFilter = THREE.LinearFilter;
+                            texture.flipY = true;
+                            setBaseMapTexture(texture);
+                        }
+                    };
+                    img.src = tileUrl;
+                }
+            }
+        } else {
+            setBaseMapTexture(null);
+        }
+    }, [baseMapName]);
+
+    useEffect(() => {
+        // Load DEM tiles with same zoom level as configured
+        const zoom = TERRAIN_CONFIG.DEM_ZOOM_LEVEL;
+        fetchTerrainTile(zoom).then(setTerrainData).catch(console.error);
+    }, []); // Will reload when component remounts with new BOUNDS
 
     // Calculate visible range based on shape
     const visibleRange = useMemo(() => {
@@ -140,24 +250,58 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
         const arr = geo.attributes.position.array;
         const colors: number[] = [];
 
+        // Store original height data as custom attribute
+        const heightData = new Float32Array(geo.attributes.position.count);
+        for (let i = 0; i < heightData.length; i++) {
+            heightData[i] = data[i] || minHeight;
+        }
+        geo.setAttribute('heightData', new THREE.BufferAttribute(heightData, 1));
+
         const heightRange = visibleMax - visibleMin || 1;
-        const baseMultiplier = 0.15;
-        const currentMultiplier = baseMultiplier * (exaggeration / 100);
+        // Generate geometry with normalized height (1.0 scale).
+        // Actual exaggeration is applied via mesh.scale.z to avoid expensive geometry regeneration.
+        const currentMultiplier = 1.0;
 
         for (let i = 0; i < count; i++) {
+            // Use DEM data directly without rotation
             const rawHeight = data[i] || minHeight;
             const relativeHeight = rawHeight - minHeight;
             arr[i * 3 + 2] = relativeHeight * currentMultiplier;
 
-            const hRaw = rawHeight;
-            const hNormalized = (hRaw - visibleMin) / heightRange;
-            const h = Math.min(Math.max(hNormalized, 0), 1);
+            // Only compute vertex colors if not using base map
+            if (!baseMapTexture) {
+                const hRaw = rawHeight;
+                const hNormalized = (hRaw - visibleMin) / heightRange;
+                const h = Math.min(Math.max(hNormalized, 0), 1);
 
-            const safePalette = paletteColors && paletteColors.length > 0 ? paletteColors : ['#000000', '#ffffff'];
-            const [r, g, b] = getColorFromScale(h, safePalette);
-            colors.push(r, g, b);
+                const safePalette = paletteColors && paletteColors.length > 0 ? paletteColors : ['#000000', '#ffffff'];
+                const [r, g, b] = getColorFromScale(h, safePalette);
+                colors.push(r, g, b);
+            }
         }
-        geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+        // Only set vertex colors if not using base map
+        if (!baseMapTexture && colors.length > 0) {
+            geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        }
+
+        // Apply precise UV mapping if base map texture has UV bounds
+        if (baseMapTexture && (baseMapTexture as any).uvBounds) {
+            const { uMin, vMin, uMax, vMax } = (baseMapTexture as any).uvBounds;
+            const uvArray = geo.attributes.uv.array;
+
+            for (let i = 0; i < uvArray.length / 2; i++) {
+                const u = uvArray[i * 2];
+                const v = uvArray[i * 2 + 1];
+
+                // Remap UV from [0,1] to [uMin,uMax] x [vMin,vMax]
+                uvArray[i * 2] = uMin + u * (uMax - uMin);
+                uvArray[i * 2 + 1] = vMin + v * (vMax - vMin);
+            }
+
+            geo.attributes.uv.needsUpdate = true;
+        }
+
         geo.computeVertexNormals();
 
         // --- Side Walls (Rectangle Only) ---
@@ -417,7 +561,11 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
         }
 
         return { topGeometry: geo, sideGeometries: sides };
-    }, [terrainData, exaggeration, paletteColors, visibleRange, shape]);
+    }, [terrainData, paletteColors, visibleRange, shape, baseMapTexture]);
+
+    // Calculate dynamic Z-scale based on exaggeration
+    // baseMultiplier was 0.15 in the original code
+    const zScale = 0.15 * (exaggeration / 100);
 
     const alphaMap = useMemo(() => {
         if (shape === 'rectangle') return null;
@@ -451,9 +599,10 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
     return (
         <group ref={meshRef} rotation={[-Math.PI / 2, 0, 0]}>
             {/* Top Surface */}
-            <mesh geometry={topGeometry} receiveShadow castShadow>
+            <mesh geometry={topGeometry} receiveShadow castShadow scale={[1, 1, zScale]}>
                 <meshStandardMaterial
-                    vertexColors
+                    map={baseMapTexture}
+                    vertexColors={!baseMapTexture}
                     roughness={0.8}
                     metalness={0.1}
                     side={THREE.DoubleSide}
@@ -467,7 +616,7 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
             {showSoilProfile && (shape === 'rectangle' || shape === 'ellipse') && sideGeometries.length > 0 && (
                 <>
                     {sideGeometries.map((geo, i) => (
-                        <mesh key={i} geometry={geo} receiveShadow castShadow>
+                        <mesh key={i} geometry={geo} receiveShadow castShadow scale={[1, 1, zScale]}>
                             <meshStandardMaterial map={sedimentTexture} roughness={1} side={THREE.DoubleSide} />
                         </mesh>
                     ))}

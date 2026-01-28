@@ -13,47 +13,78 @@ export const getTileXYZ = (lat: number, lon: number, zoom: number) => {
 };
 
 export const fetchTerrainTile = async (zoom = 15) => {
-    const centerLat = (BOUNDS.latMin + BOUNDS.latMax) / 2;
-    const centerLon = (BOUNDS.lonMin + BOUNDS.lonMax) / 2;
-    const { x, y, z } = getTileXYZ(centerLat, centerLon, zoom);
+    // Calculate tile bounds from BOUNDS
+    const minTile = getTileXYZ(BOUNDS.latMax, BOUNDS.lonMin, zoom);
+    const maxTile = getTileXYZ(BOUNDS.latMin, BOUNDS.lonMax, zoom);
 
-    // Use AWS Terrain Tiles (Terrarium format)
-    // Public bucket: https://registry.opendata.aws/terrain-tiles/
-    const url = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
+    const tilesX = maxTile.x - minTile.x + 1;
+    const tilesY = maxTile.y - minTile.y + 1;
+    const tileSize = 256;
 
-    return new Promise<{ width: number; height: number; data: Float32Array; minHeight: number; maxHeight: number }>((resolve, reject) => {
-        const img = new Image();
-        img.crossOrigin = 'Anonymous';
-        img.src = url;
-        img.onload = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return reject(new Error('Canvas context not available'));
+    // Create composite canvas
+    const compositeWidth = tilesX * tileSize;
+    const compositeHeight = tilesY * tileSize;
+    const canvas = document.createElement('canvas');
+    canvas.width = compositeWidth;
+    canvas.height = compositeHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas context not available');
 
-            ctx.drawImage(img, 0, 0);
-            const imgData = ctx.getImageData(0, 0, img.width, img.height);
-            const { data } = imgData;
-            const elevations = new Float32Array(img.width * img.height);
+    // Load all tiles
+    const tilePromises: Promise<void>[] = [];
 
-            let minH = Infinity;
-            let maxH = -Infinity;
+    for (let ty = 0; ty < tilesY; ty++) {
+        for (let tx = 0; tx < tilesX; tx++) {
+            const tileX = minTile.x + tx;
+            const tileY = minTile.y + ty;
 
-            for (let i = 0; i < data.length; i += 4) {
-                const r = data[i];
-                const g = data[i + 1];
-                const b = data[i + 2];
-                // decoding terrarium
-                // (red * 256 + green + blue / 256) - 32768
-                const meters = (r * 256 + g + b / 256) - 32768;
+            const url = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${zoom}/${tileX}/${tileY}.png`;
 
-                elevations[i / 4] = meters;
-                if (meters < minH) minH = meters;
-                if (meters > maxH) maxH = meters;
-            }
-            resolve({ width: img.width, height: img.height, data: elevations, minHeight: minH, maxHeight: maxH });
-        };
-        img.onerror = (e) => reject(new Error(`Failed to load tile image: ${url}`));
-    });
+            const promise = new Promise<void>((resolve, reject) => {
+                const img = new Image();
+                img.crossOrigin = 'Anonymous';
+                img.onload = () => {
+                    ctx.drawImage(img, tx * tileSize, ty * tileSize);
+                    resolve();
+                };
+                img.onerror = () => {
+                    console.error(`Failed to load DEM tile ${tileX},${tileY}`);
+                    resolve(); // Continue even if tile fails
+                };
+                img.src = url;
+            });
+
+            tilePromises.push(promise);
+        }
+    }
+
+    // Wait for all tiles
+    await Promise.all(tilePromises);
+
+    // Extract elevation data from composite canvas
+    const imgData = ctx.getImageData(0, 0, compositeWidth, compositeHeight);
+    const { data } = imgData;
+    const elevations = new Float32Array(compositeWidth * compositeHeight);
+
+    let minH = Infinity;
+    let maxH = -Infinity;
+
+    for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const meters = (r * 256 + g + b / 256) - 32768;
+
+        elevations[i / 4] = meters;
+        if (meters < minH) minH = meters;
+        if (meters > maxH) maxH = meters;
+    }
+
+    return {
+        width: compositeWidth,
+        height: compositeHeight,
+        data: elevations,
+        minHeight: minH,
+        maxHeight: maxH
+    };
 };

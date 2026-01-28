@@ -1,21 +1,28 @@
 export const TERRAIN_CONFIG = {
-    // SRTM Tile settings
-    // Default zoom level for fetching terrain
-    ZOOM_LEVEL: 15,
+    // Zoom Levels
+    DEM_ZOOM_LEVEL: 15, // For elevation data (max 15 for AWS SRTM)
 
     // Map Extent: Latitude and Longitude bounds of the target area
+    /*
     BOUNDS: {
         latMin: 14.397022,
         lonMin: 101.013221,
         latMax: 14.403549,
         lonMax: 101.022433
     },
+    */
+    BOUNDS: {
+        latMin: 16.828773,
+        lonMin: 101.676558,
+        latMax: 16.955233,
+        lonMax: 101.843331,
+    },
 
     // Target Area Display (for UI)
     SOURCE_TEXT: "AWS Terrain Tiles (SRTM)",
 
     // Default Shape: 'rectangle' or 'ellipse'
-    DEFAULT_SHAPE: 'ellipse',
+    DEFAULT_SHAPE: 'rectangle',
 
     // Soil Profile Depth (in meters) from the lowest point
     SOIL_DEPTH_METERS: 20,
@@ -38,7 +45,7 @@ export const TERRAIN_CONFIG = {
     // Exaggeration Settings
     EXAGGERATION: {
         DEFAULT: 200,
-        MIN: 0,
+        MIN: 1,
         MAX: 500
     },
 
@@ -51,6 +58,13 @@ export const TERRAIN_CONFIG = {
         'Volcanic': ['#000000', '#550000', '#aa0000', '#ff4500'],
         'Snow': ['#2f4f4f', '#708090', '#b0c4de', '#ffffff'],
         'Oceanic': ['#000080', '#0000cd', '#20b2aa', '#e0ffff'],
+    },
 
-    }
+    // Base Map Tile Servers (XYZ Tiled)
+    BASE_MAPS: {
+        'Google Satellite': 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+        'OpenStreetMap': 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    },
+    DEFAULT_BASE_MAP: null, // null = use color palette, or set to a key from BASE_MAPS
+    BASE_MAP_ZOOM_LEVEL: 15, // Zoom level for base map tiles (higher = more detail)
 };
