@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { fetchTerrainTile, calculateBoundsDimensions, calculateOptimalZoom } from '../utils/terrain';
+import { useThree, useFrame } from '@react-three/fiber';
 import { TERRAIN_CONFIG } from '../config';
 
 interface TerrainProps {
@@ -79,6 +80,61 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
     const meshRef = useRef<THREE.Group>(null);
     const sedimentTexture = useMemo(() => createSedimentTexture(), []);
     const lastHoverUpdate = useRef(0);
+    const { camera } = useThree();
+
+    // LOD State
+    const [lodZoom, setLodZoom] = useState<number>(() => calculateOptimalZoom(TERRAIN_CONFIG.BOUNDS, 1024, 12));
+    const lastLodCheck = useRef(0);
+    const currentLodZoom = useRef(lodZoom);
+
+    // Dynamic LOD Monitoring
+    useFrame(() => {
+        const now = Date.now();
+        if (now - lastLodCheck.current < 500) return; // Check every 500ms
+        lastLodCheck.current = now;
+
+        // Calculate distance to center (approx) or altitude
+        // Camera is at [50, 40, 80] initially. Center is 0,0,0.
+        // Simple altitude check: camera.position.y (assuming Y-up world, but controls orbit)
+        // Better: Distance to origin (0,0,0) which is center of map
+        const dist = camera.position.distanceTo(new THREE.Vector3(0, 0, 0));
+
+        // Mapping Distance to Zoom
+        // Dist 200 (Far) -> Zoom 8
+        // Dist 20 (Close) -> Zoom 15
+
+        // Base scale impact: The world is scaled to 100 units wide.
+        // Map width in meters:
+        const mapWidthMeters = calculateBoundsDimensions(TERRAIN_CONFIG.BOUNDS).width;
+        // Scale ratio: 100 units = mapWidthMeters
+        // 1 unit = mapWidthMeters / 100
+        const metersPerUnit = mapWidthMeters / 100;
+        const distMeters = dist * metersPerUnit;
+
+        // Calculate target zoom based on distance
+        // Rule of thumb: Pixel size ~ Distance * 0.0003 (FOV dependent)
+        // Zoom Level Z resolution ~ 156543 / 2^Z meters/pixel
+        // Desired Meters/Pixel = DistanceMeters * 0.001 (approx for visual fidelity)
+
+        let targetZ = 12;
+        // Shifted Thresholds for Higher Resolution (approx 2x previous detail)
+        if (distMeters < 1000) targetZ = 16;      // Was < 500
+        else if (distMeters < 2000) targetZ = 15; // Was < 1000
+        else if (distMeters < 5000) targetZ = 14; // Was < 2500
+        else if (distMeters < 10000) targetZ = 13; // Was < 5000
+        else if (distMeters < 20000) targetZ = 12; // Was < 10000
+        else targetZ = 11;                         // Was 10
+
+        // Clamp to Max DEM Level
+        targetZ = Math.min(targetZ, TERRAIN_CONFIG.DEM_MAX_LEVEL);
+
+        // Only update if changed by > 0 (integer steps)
+        if (targetZ !== currentLodZoom.current) {
+            currentLodZoom.current = targetZ;
+            setLodZoom(targetZ);
+            // console.log(`LOD Update: Dist ${Math.round(distMeters)}m -> Zoom ${targetZ}`);
+        }
+    });
 
     // Helper function to convert lat/lon to tile coordinates
     const latLonToTile = (lat: number, lon: number, zoom: number) => {
@@ -93,10 +149,10 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
     useEffect(() => {
         if (baseMapName && TERRAIN_CONFIG.BASE_MAPS[baseMapName as keyof typeof TERRAIN_CONFIG.BASE_MAPS]) {
             const urlTemplate = TERRAIN_CONFIG.BASE_MAPS[baseMapName as keyof typeof TERRAIN_CONFIG.BASE_MAPS];
-            // Calculate optimal zoom for texture (higher detail than DEM)
-            // Target ~2048 pixels wide for good texture quality
-            const zoom = calculateOptimalZoom(TERRAIN_CONFIG.BOUNDS, 2048, 19);
-            console.log('BaseMap Optimal Zoom:', zoom);
+            // Dynamic LOD: Use lodZoom but allow higher res for texture (often avail up to 19)
+            // But cap it reasonably (e.g. +3 for 2x more detail than +2)
+            const zoom = Math.min(lodZoom + 3, 19);
+            console.log(`BaseMap LOD: ${lodZoom} -> TextureZoom: ${zoom}`);
 
             // Calculate tile bounds from BOUNDS (note: latMax goes to minTile.y)
             const minTile = latLonToTile(TERRAIN_CONFIG.BOUNDS.latMax, TERRAIN_CONFIG.BOUNDS.lonMin, zoom);
@@ -194,16 +250,17 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
         } else {
             setBaseMapTexture(null);
         }
-    }, [baseMapName]);
+    }, [baseMapName, lodZoom]); // Added lodZoom dependency
 
     useEffect(() => {
-        // Calculate optimal zoom for DEM (Elevation)
-        // Target ~1024 pixels wide for geometry (mesh density)
-        const zoom = calculateOptimalZoom(TERRAIN_CONFIG.BOUNDS, 1024, TERRAIN_CONFIG.DEM_MAX_LEVEL);
-        console.log('DEM Optimal Zoom:', zoom);
-
-        fetchTerrainTile(zoom).then(setTerrainData).catch(console.error);
-    }, []); // Will reload when component remounts with new BOUNDS
+        // Fetch DEM with dynamic LOD
+        console.log(`DEM LOD Update: Zoom ${lodZoom}`);
+        let active = true;
+        fetchTerrainTile(lodZoom).then(data => {
+            if (active) setTerrainData(data);
+        }).catch(console.error);
+        return () => { active = false; };
+    }, [lodZoom]); // Reload when lodZoom changes
 
     // Calculate visible range based on shape
     const visibleRange = useMemo(() => {
