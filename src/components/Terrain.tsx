@@ -10,6 +10,7 @@ interface TerrainProps {
     showSoilProfile?: boolean;
     baseMapName?: string | null;
     onHover?: (data: { height: number; lat: number; lon: number } | null) => void;
+    disableHover?: boolean;
 }
 
 // Helper to interpolate between pre-parsed colors
@@ -73,10 +74,11 @@ const createSedimentTexture = () => {
     return tex;
 };
 
-export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: number, max: number) => void }> = ({ shape, exaggeration = 100, paletteColors, onHeightRangeChange, showSoilProfile = true, baseMapName = null, onHover }) => {
+const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: number, max: number) => void }> = ({ shape, exaggeration = 100, paletteColors, onHeightRangeChange, showSoilProfile = true, baseMapName = null, onHover, disableHover = false }) => {
     const [terrainData, setTerrainData] = useState<{ width: number; height: number; data: Float32Array; minHeight: number; maxHeight: number } | null>(null);
     const meshRef = useRef<THREE.Group>(null);
     const sedimentTexture = useMemo(() => createSedimentTexture(), []);
+    const lastHoverUpdate = useRef(0);
 
     // Helper function to convert lat/lon to tile coordinates
     const latLonToTile = (lat: number, lon: number, zoom: number) => {
@@ -166,7 +168,8 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
                             // (texture as any).uvBounds = { uMin, vMin, uMax, vMax };
 
                             // Apply texture transform to map the specific bounds to the 0..1 UV space of the mesh
-                            texture.offset.set(uMin, vMin);
+                            // Note: V is inverted because Canvas Y is Top-Down, but Texture UV is Bottom-Up (with flipY=true)
+                            texture.offset.set(uMin, 1 - vMax);
                             texture.repeat.set(uMax - uMin, vMax - vMin);
 
                             texture.needsUpdate = true;
@@ -623,7 +626,13 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
     const zScale = baseScale * (exaggeration / 100);
 
     const handlePointerMove = (e: THREE.Intersection) => {
-        if (!onHover || !terrainData) return;
+        if (!onHover || !terrainData || disableHover) return;
+
+        // Throttle updates to ~30fps
+        const now = Date.now();
+        if (now - lastHoverUpdate.current < 32) return;
+        lastHoverUpdate.current = now;
+
         // e.point is in world space.
         // World Y = (RawHeight - minHeight) * zScale
         // RawHeight = (World Y / zScale) + minHeight
@@ -747,4 +756,6 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
         </group>
     );
 };
+
+export const Terrain = React.memo(TerrainComponent);
 

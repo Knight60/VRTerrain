@@ -38,6 +38,7 @@ export const TERRAIN_CONFIG = {
     SOIL_DEPTH_UNIT: 'percent', // 'meters' or 'percent' of shortest bounds width
 
     // Display Options
+    ENABLE_HOVER_INFO: false, // Show elevation and coordinates on hover
     SHOW_SOIL_PROFILE: true,
     SHOW_TERRAIN_SHADOW: true,
     SHADOW_DISTANCE_VALUE: 20, // Distance of shadow from terrain base

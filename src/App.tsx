@@ -22,11 +22,16 @@ function App() {
     const [useBackgroundImage, setUseBackgroundImage] = React.useState(TERRAIN_CONFIG.USE_BACKGROUND_IMAGE);
     const [compassRotation, setCompassRotation] = React.useState(0);
     const [hoverInfo, setHoverInfo] = React.useState<{ height: number; lat: number; lon: number } | null>(null);
+    const [isInteracting, setIsInteracting] = React.useState(false);
 
     // Toggle helper
     const toggleEffect = (key: keyof typeof TERRAIN_CONFIG.EFFECTS) => {
         setEffects(prev => ({ ...prev, [key]: !prev[key] }));
     };
+
+    const handleHeightRangeChange = React.useCallback((min: number, max: number) => {
+        setElevationRange({ min, max });
+    }, []);
 
     // Calculate effect parameters
     const ambientIntensity = effects.BLOOM ? 0.7 : 0.5;
@@ -267,118 +272,19 @@ function App() {
                         shape={shape}
                         exaggeration={exaggeration}
                         paletteColors={paletteData}
-                        onHeightRangeChange={(min, max) => setElevationRange({ min, max })}
+                        onHeightRangeChange={handleHeightRangeChange}
                         showSoilProfile={showSoilProfile}
                         baseMapName={baseMapName}
-                        onHover={setHoverInfo}
+                        onHover={TERRAIN_CONFIG.ENABLE_HOVER_INFO ? setHoverInfo : undefined}
+                        disableHover={isInteracting}
                     />
 
                     {/* Shadow Plane */}
-                    {showTerrainShadow && (() => {
-                        // Calculate shadow position
-                        // Logic: Shadow is below the soil base (-SOIL_DEPTH_METERS)
-                        // Distance (Gap) = SHADOW_DISTANCE_PERCENT * Shortest_Bounds_Width_Meters
-
-                        const dimensions = calculateBoundsDimensions(TERRAIN_CONFIG.BOUNDS);
-                        const gapMeters = TERRAIN_CONFIG.SHADOW_DISTANCE_UNIT === 'percent'
-                            ? dimensions.minDimension * (TERRAIN_CONFIG.SHADOW_DISTANCE_VALUE / 100)
-                            : TERRAIN_CONFIG.SHADOW_DISTANCE_VALUE;
-
-                        // Calculate base scale to match Terrain.tsx (100 / Width)
-                        // This ensures Z moves in sync with the terrain mesh scale
-                        const baseMultiplier = 100 / dimensions.width;
-                        const currentMultiplier = baseMultiplier * (exaggeration / 100);
-
-                        // Soil Depth calculation
-                        const soilDepthMeters = TERRAIN_CONFIG.SOIL_DEPTH_UNIT === 'percent'
-                            ? dimensions.minDimension * (TERRAIN_CONFIG.SOIL_DEPTH_VALUE / 100)
-                            : TERRAIN_CONFIG.SOIL_DEPTH_VALUE;
-
-                        // Shadow Y position in World Space
-                        const shadowY = -(soilDepthMeters + gapMeters) * currentMultiplier;
-
-                        // Create blurred alpha map for shadow
-                        const createShadowAlpha = () => {
-                            const canvas = document.createElement('canvas');
-                            canvas.width = 512;
-                            canvas.height = 512;
-                            const ctx = canvas.getContext('2d');
-                            if (!ctx) return null;
-
-                            if (shape === 'ellipse') {
-                                // Ellipse with very soft gradient edges (5x softer)
-                                const gradient = ctx.createRadialGradient(256, 256, 100, 256, 256, 256);
-                                gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
-                                gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.9)');
-                                gradient.addColorStop(0.75, 'rgba(255, 255, 255, 0.5)');
-                                gradient.addColorStop(0.9, 'rgba(255, 255, 255, 0.2)');
-                                gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-                                ctx.fillStyle = gradient;
-                                ctx.fillRect(0, 0, 512, 512);
-                            } else {
-                                // Rectangle: Fill entire canvas first
-                                ctx.fillStyle = '#FFFFFF';
-                                ctx.fillRect(0, 0, 512, 512);
-
-                                // Create very soft blur effect on edges (250px = 5x original 50px)
-                                const edgeBlur = 250;
-
-                                // Top edge
-                                const gradTop = ctx.createLinearGradient(0, 0, 0, edgeBlur);
-                                gradTop.addColorStop(0, 'rgba(0, 0, 0, 1)');  // Transparent at edge
-                                gradTop.addColorStop(1, 'rgba(0, 0, 0, 0)');  // Opaque inside
-                                ctx.globalCompositeOperation = 'destination-out';
-                                ctx.fillStyle = gradTop;
-                                ctx.fillRect(0, 0, 512, edgeBlur);
-
-                                // Bottom edge
-                                const gradBottom = ctx.createLinearGradient(0, 512 - edgeBlur, 0, 512);
-                                gradBottom.addColorStop(0, 'rgba(0, 0, 0, 0)');
-                                gradBottom.addColorStop(1, 'rgba(0, 0, 0, 1)');
-                                ctx.fillStyle = gradBottom;
-                                ctx.fillRect(0, 512 - edgeBlur, 512, edgeBlur);
-
-                                // Left edge
-                                const gradLeft = ctx.createLinearGradient(0, 0, edgeBlur, 0);
-                                gradLeft.addColorStop(0, 'rgba(0, 0, 0, 1)');
-                                gradLeft.addColorStop(1, 'rgba(0, 0, 0, 0)');
-                                ctx.fillStyle = gradLeft;
-                                ctx.fillRect(0, 0, edgeBlur, 512);
-
-                                // Right edge
-                                const gradRight = ctx.createLinearGradient(512 - edgeBlur, 0, 512, 0);
-                                gradRight.addColorStop(0, 'rgba(0, 0, 0, 0)');
-                                gradRight.addColorStop(1, 'rgba(0, 0, 0, 1)');
-                                ctx.fillStyle = gradRight;
-                                ctx.fillRect(512 - edgeBlur, 0, edgeBlur, 512);
-
-                                ctx.globalCompositeOperation = 'source-over';
-                            }
-
-                            const tex = new THREE.CanvasTexture(canvas);
-                            tex.needsUpdate = true;
-                            return tex;
-                        };
-
-                        const alphaMap = createShadowAlpha();
-
-                        return (
-                            <mesh
-                                rotation={[-Math.PI / 2, 0, 0]}
-                                position={[0, shadowY, 0]}
-                                receiveShadow
-                            >
-                                <planeGeometry args={[100, 100]} />
-                                <meshBasicMaterial
-                                    color="#000000"
-                                    alphaMap={alphaMap}
-                                    transparent={true}
-                                    opacity={0.3}
-                                    depthWrite={false}
-                                />
-                            </mesh>
-                        );
-                    })()}
+                    <ShadowPlane
+                        show={showTerrainShadow}
+                        shape={shape}
+                        exaggeration={exaggeration}
+                    />
                     <Environment preset="forest" background={false} />
                     {/* Sky component creates background - disabled to show custom image */}
                     {/* <Sky
@@ -399,32 +305,36 @@ function App() {
                     maxDistance={250}
                     autoRotate={true}
                     autoRotateSpeed={0.5}
+                    onStart={() => setIsInteracting(true)}
+                    onEnd={() => setIsInteracting(false)}
                 />
             </Canvas>
 
             {/* Height Indicator */}
-            {hoverInfo && (() => {
-                // Calculate UTM
-                const zone = Math.floor((hoverInfo.lon + 180) / 6) + 1;
-                const utmProjection = `+proj=utm +zone=${zone} +datum=WGS84 +units=m +no_defs`;
-                const wgs84 = 'EPSG:4326'; // proj4 checks for this string or definition
-                const [utmX, utmY] = proj4(wgs84, utmProjection, [hoverInfo.lon, hoverInfo.lat]);
+            {
+                hoverInfo && (() => {
+                    // Calculate UTM
+                    const zone = Math.floor((hoverInfo.lon + 180) / 6) + 1;
+                    const utmProjection = `+proj=utm +zone=${zone} +datum=WGS84 +units=m +no_defs`;
+                    const wgs84 = 'EPSG:4326'; // proj4 checks for this string or definition
+                    const [utmX, utmY] = proj4(wgs84, utmProjection, [hoverInfo.lon, hoverInfo.lat]);
 
-                return (
-                    <div className="absolute bottom-6 left-6 z-10 text-[#0066B0] font-mono font-bold text-sm pointer-events-none bg-white/10 px-4 py-2 rounded backdrop-blur-md border border-white/20 select-none drop-shadow-md flex flex-col gap-1">
-                        <div>Elevation: {hoverInfo.height.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m</div>
-                        <div className="text-xs text-white/80">
-                            Lat: {hoverInfo.lat.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 6 })}<br />
-                            Lon: {hoverInfo.lon.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 6 })}
+                    return (
+                        <div className="absolute bottom-6 left-6 z-10 text-[#0066B0] font-mono font-bold text-sm pointer-events-none bg-white/10 px-4 py-2 rounded backdrop-blur-md border border-white/20 select-none drop-shadow-md flex flex-col gap-1">
+                            <div>Elevation: {hoverInfo.height.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m</div>
+                            <div className="text-xs text-white/80">
+                                Lat: {hoverInfo.lat.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 6 })}<br />
+                                Lon: {hoverInfo.lon.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 6 })}
+                            </div>
+                            <div className="text-xs text-emerald-400 mt-1">
+                                UTM Zone: {zone}N<br />
+                                E: {utmX.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<br />
+                                N: {utmY.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
                         </div>
-                        <div className="text-xs text-emerald-400 mt-1">
-                            UTM Zone: {zone}N<br />
-                            E: {utmX.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<br />
-                            N: {utmY.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </div>
-                    </div>
-                );
-            })()}
+                    );
+                })()
+            }
 
             <div className="absolute bottom-6 right-6 z-10 text-right pointer-events-none">
                 <div className="text-white/40 text-xs space-y-1">
@@ -472,8 +382,91 @@ function App() {
                     </svg>
                 </div>
             </div>
-        </div>
+        </div >
     )
 }
 
-export default App
+// Extracted ShadowPlane component to prevent re-rendering/re-creating textures on every App render
+const ShadowPlane = React.memo(({ show, shape, exaggeration }: { show: boolean, shape: 'rectangle' | 'ellipse', exaggeration: number }) => {
+    const alphaMap = React.useMemo(() => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+
+        if (shape === 'ellipse') {
+            const gradient = ctx.createRadialGradient(256, 256, 100, 256, 256, 256);
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+            gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.9)');
+            gradient.addColorStop(0.75, 'rgba(255, 255, 255, 0.5)');
+            gradient.addColorStop(0.9, 'rgba(255, 255, 255, 0.2)');
+            gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 512, 512);
+        } else {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, 512, 512);
+            const edgeBlur = 250;
+            const gradTop = ctx.createLinearGradient(0, 0, 0, edgeBlur);
+            gradTop.addColorStop(0, 'rgba(0, 0, 0, 1)');
+            gradTop.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.fillStyle = gradTop;
+            ctx.fillRect(0, 0, 512, edgeBlur);
+            const gradBottom = ctx.createLinearGradient(0, 512 - edgeBlur, 0, 512);
+            gradBottom.addColorStop(0, 'rgba(0, 0, 0, 0)');
+            gradBottom.addColorStop(1, 'rgba(0, 0, 0, 1)');
+            ctx.fillStyle = gradBottom;
+            ctx.fillRect(0, 512 - edgeBlur, 512, edgeBlur);
+            const gradLeft = ctx.createLinearGradient(0, 0, edgeBlur, 0);
+            gradLeft.addColorStop(0, 'rgba(0, 0, 0, 1)');
+            gradLeft.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = gradLeft;
+            ctx.fillRect(0, 0, edgeBlur, 512);
+            const gradRight = ctx.createLinearGradient(512 - edgeBlur, 0, 512, 0);
+            gradRight.addColorStop(0, 'rgba(0, 0, 0, 0)');
+            gradRight.addColorStop(1, 'rgba(0, 0, 0, 1)');
+            ctx.fillStyle = gradRight;
+            ctx.fillRect(512 - edgeBlur, 0, edgeBlur, 512);
+            ctx.globalCompositeOperation = 'source-over';
+        }
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.needsUpdate = true;
+        return tex;
+    }, [shape]);
+
+    const shadowY = React.useMemo(() => {
+        const dimensions = calculateBoundsDimensions(TERRAIN_CONFIG.BOUNDS);
+        const gapMeters = TERRAIN_CONFIG.SHADOW_DISTANCE_UNIT === 'percent'
+            ? dimensions.minDimension * (TERRAIN_CONFIG.SHADOW_DISTANCE_VALUE / 100)
+            : TERRAIN_CONFIG.SHADOW_DISTANCE_VALUE;
+
+        // Calculate base scale to match Terrain.tsx (100 / Width)
+        const baseMultiplier = 100 / dimensions.width;
+        const currentMultiplier = baseMultiplier * (exaggeration / 100);
+
+        const soilDepthMeters = TERRAIN_CONFIG.SOIL_DEPTH_UNIT === 'percent'
+            ? dimensions.minDimension * (TERRAIN_CONFIG.SOIL_DEPTH_VALUE / 100)
+            : TERRAIN_CONFIG.SOIL_DEPTH_VALUE;
+
+        return -(soilDepthMeters + gapMeters) * currentMultiplier;
+    }, [exaggeration]);
+
+    if (!show || !alphaMap) return null;
+
+    return (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, shadowY, 0]} receiveShadow>
+            <planeGeometry args={[100, 100]} />
+            <meshBasicMaterial
+                color="#000000"
+                alphaMap={alphaMap}
+                transparent={true}
+                opacity={0.3}
+                depthWrite={false}
+            />
+        </mesh>
+    );
+});
+
+export default App;
