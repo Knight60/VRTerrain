@@ -284,6 +284,135 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
             sides.push(generateWall('S'));
             sides.push(generateWall('W'));
             sides.push(generateWall('E'));
+        } else if (shape === 'ellipse') {
+            const baseDepth = -TERRAIN_CONFIG.SOIL_DEPTH_METERS * currentMultiplier;
+            const R = 49.6; // Slightly less than 50 to match mask (254/512 approx)
+            const segments = 128; // Smoothness
+
+            // Helper for bilinear interpolation
+            const getHeight = (x: number, y: number) => {
+                // x, y in -50..50 range
+                // Map to grid coordinates
+                // Grid X: -50 -> 0, +50 -> width-1
+                const gx = ((x + 50) / 100) * (width - 1);
+                // Grid Y: +50 -> 0, -50 -> height-1 (Row 0 is Top/+50)
+                const gy = ((50 - y) / 100) * (height - 1);
+
+                const ix = Math.floor(gx);
+                const iy = Math.floor(gy);
+                const fx = gx - ix;
+                const fy = gy - iy;
+
+                // Clamp indices
+                const c = (v: number, max: number) => Math.max(0, Math.min(max, v));
+                const idx = (cX: number, cY: number) => c(cY, height - 1) * width + c(cX, width - 1);
+
+                const h00 = data[idx(ix, iy)] || minHeight;
+                const h10 = data[idx(ix + 1, iy)] || minHeight;
+                const h01 = data[idx(ix, iy + 1)] || minHeight;
+                const h11 = data[idx(ix + 1, iy + 1)] || minHeight;
+
+                // Bilinear
+                const hTop = h00 * (1 - fx) + h10 * fx;
+                const hBot = h01 * (1 - fx) + h11 * fx;
+                const h = hTop * (1 - fy) + hBot * fy;
+
+                return (h - minHeight) * currentMultiplier;
+            };
+
+            const positions: number[] = [];
+            const normals: number[] = [];
+            const uvs: number[] = [];
+
+            for (let i = 0; i < segments; i++) {
+                // Current Angle
+                const theta1 = (i / segments) * 2 * Math.PI;
+                const x1 = R * Math.cos(theta1);
+                const y1 = R * Math.sin(theta1);
+                const z1 = getHeight(x1, y1);
+
+                // Next Angle
+                const theta2 = ((i + 1) / segments) * 2 * Math.PI;
+                const x2 = R * Math.cos(theta2);
+                const y2 = R * Math.sin(theta2);
+                const z2 = getHeight(x2, y2);
+
+                // Vertices
+                // TL: p1 top
+                // BL: p1 base
+                // TR: p2 top
+                // BR: p2 base
+                // Normal? Outward radial.
+                // N1 = (cos t1, sin t1, 0)
+                // N2 = (cos t2, sin t2, 0)
+
+                const addVert = (x: number, y: number, z: number, th: number, u: number, v: number) => {
+                    positions.push(x, y, z);
+                    // Normal points out from center in XY plane
+                    normals.push(Math.cos(th), Math.sin(th), 0);
+                    uvs.push(u, v);
+                };
+
+                const u1 = i / segments;
+                const u2 = (i + 1) / segments;
+
+                // Tri 1: BL, TR, TL (Outward CCW??)
+                // Let's check winding. Center (0,0).
+                // Theta goes 0 -> 2PI (CCW in XY).
+                // 1 is Angle 0. 2 is Angle Small+.
+                // 1 is Right. 2 is Slightly Up-Right.
+                // Looking from Outside (Right):
+                // TL(1), TR(2).
+                // Triangle BL, TR, TL.
+                // BL(1, base) -> TR(2, top) -> TL(1, top).
+                // Vector BL->TR (up-ish, left-ish). BL->TL (up-ish).
+                // Cross product...
+                // Let's stick to standard counter-clockwise definition.
+                // 1 is "Left" in the sequence if we walk CCW?
+                // No, if we walk CCW, 1 is 'previous', 2 is 'next'.
+                // So 1 is Left, 2 is Right (if looking from center).
+                // But we look from OUTSIDE.
+                // Looking from outside, 1 (Angle 0) is Right?? No.
+                // Angle 0 is East. Angle small is North-East.
+                // If I stand East and look West (at terrain):
+                // 0 is Center-ish. Small is Right-ish.
+                // Wait. Standard CCW 2D plane.
+                // Let's just create Quad p1(Left), p2(Right).
+                // p1 is Angle i. p2 is Angle i+1.
+                // From outside?
+                // Tangent is (-sin, cos).
+                // Normal (cos, sin).
+                // If we move along tangent, we move CCW.
+                // So p1 is "behind", p2 is "ahead".
+                // If we face the wall (looking inward -Normal), Left is p2, Right is p1.
+                // If we face OUTWARD (looking along Normal):
+                // Left is p1. Right is p2.
+                // So p1=Left, p2=Right.
+                // TL=Top1, TR=Top2.
+                // Quad: TL, BL, TR, BR.
+                // Tri 1: BL, TR, TL.
+                // Tri 2: BL, BR, TR.
+
+                // BL
+                addVert(x1, y1, baseDepth, theta1, u1, 1);
+                // TR
+                addVert(x2, y2, z2, theta2, u2, 0);
+                // TL
+                addVert(x1, y1, z1, theta1, u1, 0);
+
+                // BL
+                addVert(x1, y1, baseDepth, theta1, u1, 1);
+                // BR
+                addVert(x2, y2, baseDepth, theta2, u2, 1);
+                // TR
+                addVert(x2, y2, z2, theta2, u2, 0);
+            }
+
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+            geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+            sides.push(geo);
         }
 
         return { topGeometry: geo, sideGeometries: sides };
@@ -333,8 +462,8 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
                 />
             </mesh>
 
-            {/* Side Walls (Rectangle Only) */}
-            {shape === 'rectangle' && sideGeometries.length === 4 && (
+            {/* Side Walls */}
+            {(shape === 'rectangle' || shape === 'ellipse') && sideGeometries.length > 0 && (
                 <>
                     {sideGeometries.map((geo, i) => (
                         <mesh key={i} geometry={geo} receiveShadow castShadow>
