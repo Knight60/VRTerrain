@@ -11,37 +11,28 @@ interface TerrainProps {
     baseMapName?: string | null;
 }
 
-// Helper to convert hex to rgb
-const hexToRgb = (hex: string) => {
-    // Match first 6 hex digits (ignore alpha if present)
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})/i.exec(hex);
-    return result ? {
-        r: parseInt(result[1], 16) / 255,
-        g: parseInt(result[2], 16) / 255,
-        b: parseInt(result[3], 16) / 255
-    } : { r: 0, g: 0, b: 0 };
-};
+// Helper to interpolate between pre-parsed colors
+interface RGB { r: number; g: number; b: number; }
 
-// Helper to interpolate between colors
-const getColorFromScale = (t: number, colors: string[]) => {
+const getColorFromScaleParsed = (t: number, rgbColors: RGB[]) => {
     if (t <= 0) {
-        const c = hexToRgb(colors[0]);
+        const c = rgbColors[0];
         return [c.r, c.g, c.b];
     }
     if (t >= 1) {
-        const c = hexToRgb(colors[colors.length - 1]);
+        const c = rgbColors[rgbColors.length - 1];
         return [c.r, c.g, c.b];
     }
 
     // Map t to segment
-    const segmentCount = colors.length - 1;
+    const segmentCount = rgbColors.length - 1;
     const index = t * segmentCount;
     const lowerIndex = Math.floor(index);
-    const upperIndex = Math.min(lowerIndex + 1, colors.length - 1);
+    const upperIndex = Math.min(lowerIndex + 1, rgbColors.length - 1);
     const factor = index - lowerIndex;
 
-    const c1 = hexToRgb(colors[lowerIndex]);
-    const c2 = hexToRgb(colors[upperIndex]);
+    const c1 = rgbColors[lowerIndex];
+    const c2 = rgbColors[upperIndex];
 
     return [
         c1.r + (c2.r - c1.r) * factor,
@@ -248,7 +239,10 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
         const geo = new THREE.PlaneGeometry(100, 100, width - 1, height - 1);
         const count = geo.attributes.position.count;
         const arr = geo.attributes.position.array;
-        const colors: number[] = [];
+
+        // Initialize vertex colors buffer (allocated but not computed yet)
+        const colors = new Float32Array(count * 3);
+        geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
         // Store original height data as custom attribute
         const heightData = new Float32Array(geo.attributes.position.count);
@@ -268,38 +262,8 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
             const relativeHeight = rawHeight - minHeight;
             arr[i * 3 + 2] = relativeHeight * currentMultiplier;
 
-            // Only compute vertex colors if not using base map
-            if (!baseMapTexture) {
-                const hRaw = rawHeight;
-                const hNormalized = (hRaw - visibleMin) / heightRange;
-                const h = Math.min(Math.max(hNormalized, 0), 1);
-
-                const safePalette = paletteColors && paletteColors.length > 0 ? paletteColors : ['#000000', '#ffffff'];
-                const [r, g, b] = getColorFromScale(h, safePalette);
-                colors.push(r, g, b);
-            }
-        }
-
-        // Only set vertex colors if not using base map
-        if (!baseMapTexture && colors.length > 0) {
-            geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-        }
-
-        // Apply precise UV mapping if base map texture has UV bounds
-        if (baseMapTexture && (baseMapTexture as any).uvBounds) {
-            const { uMin, vMin, uMax, vMax } = (baseMapTexture as any).uvBounds;
-            const uvArray = geo.attributes.uv.array;
-
-            for (let i = 0; i < uvArray.length / 2; i++) {
-                const u = uvArray[i * 2];
-                const v = uvArray[i * 2 + 1];
-
-                // Remap UV from [0,1] to [uMin,uMax] x [vMin,vMax]
-                uvArray[i * 2] = uMin + u * (uMax - uMin);
-                uvArray[i * 2 + 1] = vMin + v * (vMax - vMin);
-            }
-
-            geo.attributes.uv.needsUpdate = true;
+            // Initial UVs are standard 0..1 from PlaneGeometry, which is fine for start.
+            // We will update them in the useEffect below if needed.
         }
 
         geo.computeVertexNormals();
@@ -561,7 +525,88 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
         }
 
         return { topGeometry: geo, sideGeometries: sides };
-    }, [terrainData, paletteColors, visibleRange, shape, baseMapTexture]);
+    }, [terrainData, visibleRange, shape]); // Removed paletteColors & baseMapTexture from dependencies
+
+    // Effect to handle Appearance Updates (Colors & UVs) directly on the geometry
+    useEffect(() => {
+        if (!topGeometry || !visibleRange) return;
+
+        const geo = topGeometry;
+        const count = geo.attributes.position.count;
+        const heightDataAttr = geo.getAttribute('heightData');
+        const colorAttr = geo.getAttribute('color');
+        const uvAttr = geo.getAttribute('uv');
+
+        if (!heightDataAttr || !colorAttr || !uvAttr) return;
+
+        // 1. Handle UV Updates (Base Map)
+        if (baseMapTexture && (baseMapTexture as any).uvBounds) {
+            const { uMin, vMin, uMax, vMax } = (baseMapTexture as any).uvBounds;
+            const uvArray = uvAttr.array as Float32Array;
+
+            // Recalculate UVs based on PlaneGeometry defaults (which are regular grid 0..1)
+            // We know PlaneGeometry generates UVs row by row.
+            const widthSegments = (terrainData?.width || 2) - 1;
+            const heightSegments = (terrainData?.height || 2) - 1;
+
+            for (let i = 0; i < count; i++) {
+                // Reconstruct standard UV (0..1) based on index
+                // PlaneGeometry vertex order: row by row, left to right.
+                const ix = i % (widthSegments + 1);
+                const iy = Math.floor(i / (widthSegments + 1));
+
+                const u = ix / widthSegments;
+                // PlaneGeometry UV top-left is (0,1) or (0,0)? 
+                // Three.js PlaneGeometry: (0, 1) top-left -> (1, 1) top-right ... (0, 0) bottom-left.
+                // Actually u is x, v is y (1 at top, 0 at bottom).
+                const v = 1 - (iy / heightSegments);
+
+                // Remap: u' = uMin + u * (uMax - uMin)
+                uvArray[i * 2] = uMin + u * (uMax - uMin);
+                uvArray[i * 2 + 1] = vMin + v * (vMax - vMin);
+            }
+            uvAttr.needsUpdate = true;
+        } else {
+            // Reset UVs to standard 0..1 if we switch back to palette (optional, but good for safety)
+            // Although Palette mode doesn't strictly use UVs, if we switch back and forth it's cleaner.
+            // ... (Optimization: Skip if we know we are not using texture)
+        }
+
+        // 2. Handle Color Updates (Palette)
+        // Optimization: Even if using Base Map, we update colors so switching back is fast.
+        // OR: Only update if !baseMapTexture to save CPU? 
+        // Let's update always to keep state consistent, but optimize the loop 
+        // Update: optimizing the loop with pre-parsed colors.
+
+        const heightData = heightDataAttr.array as Float32Array;
+        const colorArray = colorAttr.array as Float32Array;
+        const { min: visibleMin, max: visibleMax } = visibleRange;
+        const heightRange = visibleMax - visibleMin || 1;
+        const safePalette = paletteColors && paletteColors.length > 0 ? paletteColors : ['#000000', '#ffffff'];
+
+        // Pre-parse colors to avoid thousands of regex calls inside loop
+        const rgbPalette = safePalette.map(hex => {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16) / 255,
+                g: parseInt(result[2], 16) / 255,
+                b: parseInt(result[3], 16) / 255
+            } : { r: 0, g: 0, b: 0 };
+        });
+
+        for (let i = 0; i < count; i++) {
+            const hRaw = heightData[i];
+            const hNormalized = (hRaw - visibleMin) / heightRange;
+            const h = Math.min(Math.max(hNormalized, 0), 1);
+
+            const [r, g, b] = getColorFromScaleParsed(h, rgbPalette);
+            colorArray[i * 3] = r;
+            colorArray[i * 3 + 1] = g;
+            colorArray[i * 3 + 2] = b;
+        }
+        colorAttr.needsUpdate = true;
+
+    }, [topGeometry, visibleRange, paletteColors, baseMapTexture, terrainData?.width, terrainData?.height]);
 
     // Calculate dynamic Z-scale based on exaggeration
     // User requirement: Range (1000m) -> 10% of width (10 units).
@@ -600,10 +645,25 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
     return (
         <group ref={meshRef} rotation={[-Math.PI / 2, 0, 0]}>
             {/* Top Surface */}
-            <mesh geometry={topGeometry} receiveShadow castShadow scale={[1, 1, zScale]}>
+            {/* Top Surface - Palette Mode (Vertex Colors) */}
+            <mesh geometry={topGeometry} receiveShadow castShadow scale={[1, 1, zScale]} visible={!baseMapTexture}>
+                <meshStandardMaterial
+                    vertexColors={true}
+                    roughness={0.8}
+                    metalness={0.1}
+                    side={THREE.DoubleSide}
+                    alphaMap={alphaMap}
+                    transparent={shape === 'ellipse'}
+                    alphaTest={shape === 'ellipse' ? 0.1 : 0}
+                />
+            </mesh>
+
+            {/* Top Surface - Base Map Mode (Texture) */}
+            {/* By using two separate meshes/materials, we avoid shader recompilation when toggling mode */}
+            <mesh geometry={topGeometry} receiveShadow castShadow scale={[1, 1, zScale]} visible={!!baseMapTexture}>
                 <meshStandardMaterial
                     map={baseMapTexture}
-                    vertexColors={!baseMapTexture}
+                    vertexColors={false}
                     roughness={0.8}
                     metalness={0.1}
                     side={THREE.DoubleSide}
