@@ -1,9 +1,6 @@
-export const BOUNDS = {
-    latMin: 14.397022,
-    lonMin: 101.013221,
-    latMax: 14.403549,
-    lonMax: 101.022433
-};
+import { TERRAIN_CONFIG } from '../config';
+
+const { BOUNDS } = TERRAIN_CONFIG;
 
 export const getTileXYZ = (lat: number, lon: number, zoom: number) => {
     const n = Math.pow(2, zoom);
