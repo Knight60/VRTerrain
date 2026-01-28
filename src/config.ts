@@ -41,7 +41,11 @@ export const TERRAIN_CONFIG = {
     ENABLE_HOVER_INFO: false, // Show elevation and coordinates on hover
     SHOW_SOIL_PROFILE: true,
     SHOW_TERRAIN_SHADOW: true,
-    SHADOW_DISTANCE_VALUE: 20, // Distance of shadow from terrain base
+    ENABLE_MICRO_DISPLACEMENT: true, // Artificial roughness from satellite texture
+    MICRO_DISPLACEMENT_INTENSITY: 5.0, // Strength of the displacement effect
+
+    AUTO_ROTATE: true, // Automatically rotate the camera around the terrain
+    SHADOW_DISTANCE_VALUE: 1000, // Distance of shadow from terrain base
     SHADOW_DISTANCE_UNIT: 'percent', // 'meters' or 'percent' of shortest bounds width
 
     // Background Image

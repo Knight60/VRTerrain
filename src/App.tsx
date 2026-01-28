@@ -19,6 +19,8 @@ function App() {
     const [effects, setEffects] = React.useState(TERRAIN_CONFIG.EFFECTS);
     const [showSoilProfile, setShowSoilProfile] = React.useState(TERRAIN_CONFIG.SHOW_SOIL_PROFILE);
     const [showTerrainShadow, setShowTerrainShadow] = React.useState(TERRAIN_CONFIG.SHOW_TERRAIN_SHADOW);
+    const [enableMicroDisplacement, setEnableMicroDisplacement] = React.useState(TERRAIN_CONFIG.ENABLE_MICRO_DISPLACEMENT);
+    const [autoRotate, setAutoRotate] = React.useState(TERRAIN_CONFIG.AUTO_ROTATE);
     const [useBackgroundImage, setUseBackgroundImage] = React.useState(TERRAIN_CONFIG.USE_BACKGROUND_IMAGE);
     const [compassRotation, setCompassRotation] = React.useState(0);
     const [hoverInfo, setHoverInfo] = React.useState<{ height: number; lat: number; lon: number } | null>(null);
@@ -215,6 +217,24 @@ function App() {
                                 <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer hover:text-white transition-colors">
                                     <input
                                         type="checkbox"
+                                        checked={enableMicroDisplacement}
+                                        onChange={() => setEnableMicroDisplacement(!enableMicroDisplacement)}
+                                        className="accent-emerald-500"
+                                    />
+                                    Micro-Displacement (Roughness)
+                                </label>
+                                <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer hover:text-white transition-colors">
+                                    <input
+                                        type="checkbox"
+                                        checked={autoRotate}
+                                        onChange={() => setAutoRotate(!autoRotate)}
+                                        className="accent-emerald-500"
+                                    />
+                                    Auto Rotate
+                                </label>
+                                <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer hover:text-white transition-colors">
+                                    <input
+                                        type="checkbox"
                                         checked={useBackgroundImage}
                                         onChange={() => setUseBackgroundImage(!useBackgroundImage)}
                                         className="accent-emerald-500"
@@ -277,6 +297,7 @@ function App() {
                         showSoilProfile={showSoilProfile}
                         baseMapName={baseMapName}
                         onHover={TERRAIN_CONFIG.ENABLE_HOVER_INFO ? setHoverInfo : undefined}
+                        enableMicroDisplacement={enableMicroDisplacement}
                         disableHover={isInteracting}
                     />
 
@@ -304,7 +325,7 @@ function App() {
                     maxPolarAngle={Math.PI / 2 - 0.05}
                     minDistance={10}
                     maxDistance={250}
-                    autoRotate={true}
+                    autoRotate={autoRotate}
                     autoRotateSpeed={0.5}
                     onStart={() => setIsInteracting(true)}
                     onEnd={() => setIsInteracting(false)}

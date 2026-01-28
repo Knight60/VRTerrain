@@ -12,6 +12,7 @@ interface TerrainProps {
     baseMapName?: string | null;
     onHover?: (data: { height: number; lat: number; lon: number } | null) => void;
     disableHover?: boolean;
+    enableMicroDisplacement?: boolean;
 }
 
 // Helper to interpolate between pre-parsed colors
@@ -75,7 +76,7 @@ const createSedimentTexture = () => {
     return tex;
 };
 
-const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: number, max: number) => void }> = ({ shape, exaggeration = 100, paletteColors, onHeightRangeChange, showSoilProfile = true, baseMapName = null, onHover, disableHover = false }) => {
+const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: number, max: number) => void }> = ({ shape, exaggeration = 100, paletteColors, onHeightRangeChange, showSoilProfile = true, baseMapName = null, onHover, disableHover = false, enableMicroDisplacement = true }) => {
     const [terrainData, setTerrainData] = useState<{ width: number; height: number; data: Float32Array; minHeight: number; maxHeight: number } | null>(null);
     const meshRef = useRef<THREE.Group>(null);
     const sedimentTexture = useMemo(() => createSedimentTexture(), []);
@@ -643,9 +644,82 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
 
         const heightData = heightDataAttr.array as Float32Array;
         const colorArray = colorAttr.array as Float32Array;
+
         const { min: visibleMin, max: visibleMax } = visibleRange;
         const heightRange = visibleMax - visibleMin || 1;
         const safePalette = paletteColors && paletteColors.length > 0 ? paletteColors : ['#000000', '#ffffff'];
+
+        // --- MICRO-DISPLACEMENT LOGIC ---
+        // Enhanced detail from texture for Satellite maps at high zoom
+        let displacementData: Float32Array | null = null;
+
+        const applyDisplacement = enableMicroDisplacement && baseMapName === 'Google Satellite' && lodZoom >= TERRAIN_CONFIG.DEM_MAX_LEVEL && baseMapTexture && baseMapTexture.image;
+
+        if (applyDisplacement) {
+            try {
+                const img = baseMapTexture.image;
+                // Create a temporary canvas to read pixels if image is not already a canvas
+                let ctx: CanvasRenderingContext2D | null = null;
+                if (img instanceof HTMLCanvasElement) {
+                    ctx = img.getContext('2d');
+                } else {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    const c = canvas.getContext('2d');
+                    if (c) {
+                        c.drawImage(img, 0, 0);
+                        ctx = c;
+                    }
+                }
+
+                if (ctx) {
+                    const w = img.width;
+                    const h = img.height;
+                    const imgData = ctx.getImageData(0, 0, w, h).data;
+                    displacementData = new Float32Array(count);
+
+                    // Strength of displacement (meters)
+                    // At zoom 16+ each pixel is <2m. Trees are 5-20m.
+                    const detailStrength = TERRAIN_CONFIG.MICRO_DISPLACEMENT_INTENSITY * (exaggeration / 100);
+
+                    // We compute roughness/luminance at each vertex UV
+                    const uvArr = uvAttr.array as Float32Array;
+
+                    for (let i = 0; i < count; i++) {
+                        const u = uvArr[i * 2];
+                        const v = uvArr[i * 2 + 1]; // v is 0..1 (bottom to top? or top to bottom? Standard Plane is 0 bottom 1 top? No top-left usually)
+                        // In our UV generation: v = 1 - (iy / heightSegments). iy=0 (top) -> v=1. iy=max -> v=0.
+                        // Texture image Y: 0 is top.
+                        // So imageY = (1 - v) * h.
+
+                        // Clamp UV
+                        const tx = Math.floor(Math.max(0, Math.min(1, u)) * (w - 1));
+                        const ty = Math.floor(Math.max(0, Math.min(1, 1 - v)) * (h - 1));
+
+                        const idx = (ty * w + tx) * 4;
+                        const r = imgData[idx];
+                        const g = imgData[idx + 1];
+                        const b = imgData[idx + 2];
+
+                        // Luminance
+                        const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+                        // High-pass filter approximation? 
+                        // Just use straight luminance as height offset for now (Leaves/Roofs often brighter than gaps/shadows)
+                        // Shift range to -0.5..0.5 so we don't just raise everything.
+                        displacementData[i] = (lum - 0.5) * detailStrength;
+                    }
+                }
+            } catch (e) {
+                console.warn("Failed to calculate displacement", e);
+            }
+        }
+
+        // --- END DISPLACEMENT LOGIC ---
+
+        const positionAttr = geo.attributes.position;
+        const posArray = positionAttr.array as Float32Array;
 
         // Pre-parse colors to avoid thousands of regex calls inside loop
         const rgbPalette = safePalette.map(hex => {
@@ -657,18 +731,48 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
             } : { r: 0, g: 0, b: 0 };
         });
 
+        // Current multiplier from geometry generation logic
+        const currentMultiplier = exaggeration / 100;
+
         for (let i = 0; i < count; i++) {
             const hRaw = heightData[i];
-            const hNormalized = (hRaw - visibleMin) / heightRange;
-            const h = Math.min(Math.max(hNormalized, 0), 1);
 
-            const [r, g, b] = getColorFromScaleParsed(h, rgbPalette);
-            colorArray[i * 3] = r;
-            colorArray[i * 3 + 1] = g;
-            colorArray[i * 3 + 2] = b;
+            // Re-apply height with exaggeration + displacement
+            const relativeHeight = hRaw - visibleMin;
+            let finalZ = relativeHeight * currentMultiplier;
+
+            if (displacementData) {
+                finalZ += displacementData[i];
+            }
+
+            posArray[i * 3 + 2] = finalZ;
+
+            // Color update
+            if (!baseMapTexture) { // Only update colors if no base map, save CPU
+                const hNormalized = (hRaw - visibleMin) / heightRange;
+                const h = Math.min(Math.max(hNormalized, 0), 1);
+
+                const [r, g, b] = getColorFromScaleParsed(h, rgbPalette);
+                colorArray[i * 3] = r;
+                colorArray[i * 3 + 1] = g;
+                colorArray[i * 3 + 2] = b;
+            }
         }
-        colorAttr.needsUpdate = true;
-    }, [topGeometry, visibleRange, paletteColors, baseMapTexture, terrainData?.width, terrainData?.height]);
+
+        if (displacementData) {
+            positionAttr.needsUpdate = true;
+            geo.computeVertexNormals();
+        }
+
+        if (!baseMapTexture) {
+            colorAttr.needsUpdate = true;
+        }
+
+        if (!baseMapTexture) {
+            colorAttr.needsUpdate = true;
+        }
+
+    }, [topGeometry, visibleRange, paletteColors, baseMapTexture, terrainData?.width, terrainData?.height, lodZoom, exaggeration, baseMapName, enableMicroDisplacement]);
 
     // Calculate dynamic Z-scale based on real-world dimensions
     // User requirement: Height (meters) should match X/Y (meters).
