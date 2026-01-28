@@ -3,21 +3,22 @@ export const TERRAIN_CONFIG = {
     DEM_ZOOM_LEVEL: 15, // For elevation data (max 15 for AWS SRTM)
 
     // Map Extent: Latitude and Longitude bounds of the target area
-    /*
+    //*
     BOUNDS: {
         latMin: 14.397022,
         lonMin: 101.013221,
         latMax: 14.403549,
         lonMax: 101.022433
     },
-    */
-    BOUNDS: {
-        latMin: 16.828773,
-        lonMin: 101.676558,
-        latMax: 16.955233,
-        lonMax: 101.843331,
-    },
-
+    /**/
+    /*
+     BOUNDS: {
+         latMin: 16.828773,
+         lonMin: 101.676558,
+         latMax: 16.955233,
+         lonMax: 101.843331,
+     },
+     /**/
     // Target Area Display (for UI)
     SOURCE_TEXT: "AWS Terrain Tiles (SRTM)",
 
@@ -45,7 +46,7 @@ export const TERRAIN_CONFIG = {
     // Exaggeration Settings
     EXAGGERATION: {
         DEFAULT: 200,
-        MIN: 1,
+        MIN: 10,
         MAX: 500
     },
 
@@ -66,5 +67,5 @@ export const TERRAIN_CONFIG = {
         'OpenStreetMap': 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     },
     DEFAULT_BASE_MAP: null, // null = use color palette, or set to a key from BASE_MAPS
-    BASE_MAP_ZOOM_LEVEL: 15, // Zoom level for base map tiles (higher = more detail)
+    BASE_MAP_ZOOM_LEVEL: 18, // Zoom level for base map tiles (higher = more detail)
 };

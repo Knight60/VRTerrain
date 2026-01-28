@@ -159,7 +159,11 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
                             texture.flipY = true;
 
                             // Store UV bounds in texture for later use
-                            (texture as any).uvBounds = { uMin, vMin, uMax, vMax };
+                            // (texture as any).uvBounds = { uMin, vMin, uMax, vMax };
+
+                            // Apply texture transform to map the specific bounds to the 0..1 UV space of the mesh
+                            texture.offset.set(uMin, vMin);
+                            texture.repeat.set(uMax - uMin, vMax - vMin);
 
                             texture.needsUpdate = true;
                             setBaseMapTexture(texture);
@@ -539,38 +543,24 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
 
         if (!heightDataAttr || !colorAttr || !uvAttr) return;
 
-        // 1. Handle UV Updates (Base Map)
-        if (baseMapTexture && (baseMapTexture as any).uvBounds) {
-            const { uMin, vMin, uMax, vMax } = (baseMapTexture as any).uvBounds;
-            const uvArray = uvAttr.array as Float32Array;
+        // 1. Ensure UVs are standard 0..1 (PlaneGeometry defaults)
+        // This is crucial for alphaMap (ellipse) to work correctly.
+        // We no longer modify UVs for the Base Map; we modify the texture offset/repeat instead.
+        // However, since we previously mutated UVs, we must reset them here to be safe.
+        const uvArray = uvAttr.array as Float32Array;
+        const widthSegments = (terrainData?.width || 2) - 1;
+        const heightSegments = (terrainData?.height || 2) - 1;
 
-            // Recalculate UVs based on PlaneGeometry defaults (which are regular grid 0..1)
-            // We know PlaneGeometry generates UVs row by row.
-            const widthSegments = (terrainData?.width || 2) - 1;
-            const heightSegments = (terrainData?.height || 2) - 1;
-
-            for (let i = 0; i < count; i++) {
-                // Reconstruct standard UV (0..1) based on index
-                // PlaneGeometry vertex order: row by row, left to right.
-                const ix = i % (widthSegments + 1);
-                const iy = Math.floor(i / (widthSegments + 1));
-
-                const u = ix / widthSegments;
-                // PlaneGeometry UV top-left is (0,1) or (0,0)? 
-                // Three.js PlaneGeometry: (0, 1) top-left -> (1, 1) top-right ... (0, 0) bottom-left.
-                // Actually u is x, v is y (1 at top, 0 at bottom).
-                const v = 1 - (iy / heightSegments);
-
-                // Remap: u' = uMin + u * (uMax - uMin)
-                uvArray[i * 2] = uMin + u * (uMax - uMin);
-                uvArray[i * 2 + 1] = vMin + v * (vMax - vMin);
-            }
-            uvAttr.needsUpdate = true;
-        } else {
-            // Reset UVs to standard 0..1 if we switch back to palette (optional, but good for safety)
-            // Although Palette mode doesn't strictly use UVs, if we switch back and forth it's cleaner.
-            // ... (Optimization: Skip if we know we are not using texture)
+        for (let i = 0; i < count; i++) {
+            const ix = i % (widthSegments + 1);
+            const iy = Math.floor(i / (widthSegments + 1));
+            const u = ix / widthSegments;
+            const v = 1 - (iy / heightSegments);
+            uvArray[i * 2] = u;
+            uvArray[i * 2 + 1] = v;
         }
+        uvAttr.needsUpdate = true;
+
 
         // 2. Handle Color Updates (Palette)
         // Optimization: Even if using Base Map, we update colors so switching back is fast.
