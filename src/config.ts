@@ -20,6 +20,13 @@ export const TERRAIN_CONFIG = {
     // Soil Profile Depth (in meters) from the lowest point
     SOIL_DEPTH_METERS: 20,
 
+    // Visual Effects (Unreal Engine Style)
+    EFFECTS: {
+        BLOOM: true,
+        VIGNETTE: true,
+        TILT_SHIFT: false
+    },
+
     // Exaggeration Settings
     EXAGGERATION: {
         DEFAULT: 200,

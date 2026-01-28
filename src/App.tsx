@@ -1,8 +1,10 @@
+
 import React, { Suspense } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Sky, Environment, Stars } from '@react-three/drei'
 import { Terrain } from './components/Terrain'
 import { TERRAIN_CONFIG } from './config'
+import * as THREE from 'three'
 
 function App() {
     const [shape, setShape] = React.useState<'rectangle' | 'ellipse'>(TERRAIN_CONFIG.DEFAULT_SHAPE as 'rectangle' | 'ellipse');
@@ -10,6 +12,19 @@ function App() {
     const [paletteData, setPaletteData] = React.useState<string[]>(TERRAIN_CONFIG.PALETTES[TERRAIN_CONFIG.DEFAULT_PALETTE as keyof typeof TERRAIN_CONFIG.PALETTES]);
     const [paletteName, setPaletteName] = React.useState(TERRAIN_CONFIG.DEFAULT_PALETTE);
     const [elevationRange, setElevationRange] = React.useState<{ min: number; max: number } | null>(null);
+    const [effects, setEffects] = React.useState(TERRAIN_CONFIG.EFFECTS);
+
+    // Toggle helper
+    const toggleEffect = (key: keyof typeof TERRAIN_CONFIG.EFFECTS) => {
+        setEffects(prev => ({ ...prev, [key]: !prev[key] }));
+    };
+
+    // Calculate effect parameters
+    const ambientIntensity = effects.BLOOM ? 0.7 : 0.5;
+    const directionalIntensity = effects.BLOOM ? 2.0 : 1.5;
+    const fogNear = effects.VIGNETTE ? 40 : 50;
+    const fogFar = effects.VIGNETTE ? 250 : 300;
+    const fogColor = effects.TILT_SHIFT ? '#e8f4ff' : '#dceeff';
 
     return (
         <div className="relative w-full h-full bg-black">
@@ -30,19 +45,19 @@ function App() {
                             <div className="flex gap-2">
                                 <button
                                     onClick={() => setShape('rectangle')}
-                                    className={`px-3 py-1 rounded-md text-xs font-medium transition-colors border ${shape === 'rectangle'
-                                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                                        : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
-                                        }`}
+                                    className={`px - 3 py - 1 rounded - md text - xs font - medium transition - colors border ${shape === 'rectangle'
+                                            ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                                            : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                                        } `}
                                 >
                                     Rectangle
                                 </button>
                                 <button
                                     onClick={() => setShape('ellipse')}
-                                    className={`px-3 py-1 rounded-md text-xs font-medium transition-colors border ${shape === 'ellipse'
-                                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                                        : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
-                                        }`}
+                                    className={`px - 3 py - 1 rounded - md text - xs font - medium transition - colors border ${shape === 'ellipse'
+                                            ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                                            : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
+                                        } `}
                                 >
                                     Ellipse
                                 </button>
@@ -81,12 +96,12 @@ function App() {
                                             setPaletteName(key);
                                             setPaletteData(colors);
                                         }}
-                                        className={`p-2 rounded-md border text-left flex flex-col gap-1 transition-colors ${paletteName === key
-                                            ? 'bg-emerald-500/20 border-emerald-500'
-                                            : 'bg-white/5 border-white/10 hover:bg-white/10'
-                                            }`}
+                                        className={`p - 2 rounded - md border text - left flex flex - col gap - 1 transition - colors ${paletteName === key
+                                                ? 'bg-emerald-500/20 border-emerald-500'
+                                                : 'bg-white/5 border-white/10 hover:bg-white/10'
+                                            } `}
                                     >
-                                        <span className={`text-xs font-medium ${paletteName === key ? 'text-emerald-300' : 'text-gray-400'}`}>
+                                        <span className={`text - xs font - medium ${paletteName === key ? 'text-emerald-300' : 'text-gray-400'} `}>
                                             {key}
                                         </span>
                                         <div className="h-2 w-full rounded-sm overflow-hidden flex">
@@ -98,22 +113,66 @@ function App() {
                                 ))}
                             </div>
                         </div>
+
+                        <div>
+                            <p className="font-semibold text-emerald-300 mb-2">Unreal FX:</p>
+                            <div className="flex flex-col gap-2">
+                                <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer hover:text-white transition-colors">
+                                    <input
+                                        type="checkbox"
+                                        checked={effects.BLOOM}
+                                        onChange={() => toggleEffect('BLOOM')}
+                                        className="accent-emerald-500"
+                                    />
+                                    Enhanced Lighting
+                                </label>
+                                <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer hover:text-white transition-colors">
+                                    <input
+                                        type="checkbox"
+                                        checked={effects.VIGNETTE}
+                                        onChange={() => toggleEffect('VIGNETTE')}
+                                        className="accent-emerald-500"
+                                    />
+                                    Atmospheric Depth
+                                </label>
+                                <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer hover:text-white transition-colors">
+                                    <input
+                                        type="checkbox"
+                                        checked={effects.TILT_SHIFT}
+                                        onChange={() => toggleEffect('TILT_SHIFT')}
+                                        className="accent-emerald-500"
+                                    />
+                                    Bright Sky Mode
+                                </label>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <Canvas shadows camera={{ position: [50, 40, 80], fov: 45 }} dpr={[1, 2]}>
+            <Canvas
+                shadows
+                camera={{ position: [50, 40, 80], fov: 45 }}
+                dpr={[1, 2]}
+                gl={{
+                    toneMapping: THREE.ACESFilmicToneMapping,
+                    toneMappingExposure: effects.BLOOM ? 1.2 : 1.0
+                }}
+            >
                 {/* Atmosphere & Lighting */}
-                <fog attach="fog" args={['#dceeff', 50, 300]} />
-                <ambientLight intensity={0.5} />
+                <fog attach="fog" args={[fogColor, fogNear, fogFar]} />
+                <ambientLight intensity={ambientIntensity} />
                 <directionalLight
                     position={[100, 100, 50]}
-                    intensity={1.5}
+                    intensity={directionalIntensity}
                     castShadow
                     shadow-mapSize-width={2048}
                     shadow-mapSize-height={2048}
                     shadow-bias={-0.0001}
                 />
+                {effects.BLOOM && (
+                    <pointLight position={[0, 50, 0]} intensity={0.3} distance={100} color="#ffffff" />
+                )}
 
                 <Suspense fallback={null}>
                     <Terrain
@@ -128,8 +187,8 @@ function App() {
                         sunPosition={[100, 40, 50]}
                         inclination={0}
                         azimuth={0.25}
-                        turbidity={10}
-                        rayleigh={2}
+                        turbidity={effects.TILT_SHIFT ? 5 : 10}
+                        rayleigh={effects.TILT_SHIFT ? 3 : 2}
                     />
                 </Suspense>
 
