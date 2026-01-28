@@ -7,6 +7,7 @@ import { CameraTracker } from './components/CameraTracker'
 import { TERRAIN_CONFIG } from './config'
 import { calculateBoundsDimensions } from './utils/terrain'
 import * as THREE from 'three'
+import proj4 from 'proj4'
 
 function App() {
     const [shape, setShape] = React.useState<'rectangle' | 'ellipse'>(TERRAIN_CONFIG.DEFAULT_SHAPE as 'rectangle' | 'ellipse');
@@ -20,6 +21,7 @@ function App() {
     const [showTerrainShadow, setShowTerrainShadow] = React.useState(TERRAIN_CONFIG.SHOW_TERRAIN_SHADOW);
     const [useBackgroundImage, setUseBackgroundImage] = React.useState(TERRAIN_CONFIG.USE_BACKGROUND_IMAGE);
     const [compassRotation, setCompassRotation] = React.useState(0);
+    const [hoverInfo, setHoverInfo] = React.useState<{ height: number; lat: number; lon: number } | null>(null);
 
     // Toggle helper
     const toggleEffect = (key: keyof typeof TERRAIN_CONFIG.EFFECTS) => {
@@ -51,7 +53,7 @@ function App() {
                     <p className="font-semibold text-emerald-300">Target Area:</p>
                     <p>Lat: {TERRAIN_CONFIG.BOUNDS.latMin.toFixed(3)} - {TERRAIN_CONFIG.BOUNDS.latMax.toFixed(3)}</p>
                     <p>Lon: {TERRAIN_CONFIG.BOUNDS.lonMin.toFixed(3)} - {TERRAIN_CONFIG.BOUNDS.lonMax.toFixed(3)}</p>
-                    <p className="mt-1 text-xs text-gray-400">Source: {TERRAIN_CONFIG.SOURCE_TEXT}</p>
+                    <p className="mt-1 text-xs text-gray-400">Source: {TERRAIN_CONFIG.DEM_SRC_NAME}</p>
 
                     <div className="mt-4 border-t border-white/10 pt-3 space-y-4">
                         <div>
@@ -268,6 +270,7 @@ function App() {
                         onHeightRangeChange={(min, max) => setElevationRange({ min, max })}
                         showSoilProfile={showSoilProfile}
                         baseMapName={baseMapName}
+                        onHover={setHoverInfo}
                     />
 
                     {/* Shadow Plane */}
@@ -281,7 +284,9 @@ function App() {
                             ? dimensions.minDimension * (TERRAIN_CONFIG.SHADOW_DISTANCE_VALUE / 100)
                             : TERRAIN_CONFIG.SHADOW_DISTANCE_VALUE;
 
-                        const baseMultiplier = 0.01;
+                        // Calculate base scale to match Terrain.tsx (100 / Width)
+                        // This ensures Z moves in sync with the terrain mesh scale
+                        const baseMultiplier = 100 / dimensions.width;
                         const currentMultiplier = baseMultiplier * (exaggeration / 100);
 
                         // Soil Depth calculation
@@ -396,6 +401,30 @@ function App() {
                     autoRotateSpeed={0.5}
                 />
             </Canvas>
+
+            {/* Height Indicator */}
+            {hoverInfo && (() => {
+                // Calculate UTM
+                const zone = Math.floor((hoverInfo.lon + 180) / 6) + 1;
+                const utmProjection = `+proj=utm +zone=${zone} +datum=WGS84 +units=m +no_defs`;
+                const wgs84 = 'EPSG:4326'; // proj4 checks for this string or definition
+                const [utmX, utmY] = proj4(wgs84, utmProjection, [hoverInfo.lon, hoverInfo.lat]);
+
+                return (
+                    <div className="absolute bottom-6 left-6 z-10 text-[#0066B0] font-mono font-bold text-sm pointer-events-none bg-white/10 px-4 py-2 rounded backdrop-blur-md border border-white/20 select-none drop-shadow-md flex flex-col gap-1">
+                        <div>Elevation: {hoverInfo.height.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m</div>
+                        <div className="text-xs text-white/80">
+                            Lat: {hoverInfo.lat.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 6 })}<br />
+                            Lon: {hoverInfo.lon.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 6 })}
+                        </div>
+                        <div className="text-xs text-emerald-400 mt-1">
+                            UTM Zone: {zone}N<br />
+                            E: {utmX.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}<br />
+                            N: {utmY.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                    </div>
+                );
+            })()}
 
             <div className="absolute bottom-6 right-6 z-10 text-right pointer-events-none">
                 <div className="text-white/40 text-xs space-y-1">

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { fetchTerrainTile, calculateBoundsDimensions } from '../utils/terrain';
+import { fetchTerrainTile, calculateBoundsDimensions, calculateOptimalZoom } from '../utils/terrain';
 import { TERRAIN_CONFIG } from '../config';
 
 interface TerrainProps {
@@ -9,6 +9,7 @@ interface TerrainProps {
     paletteColors: string[];
     showSoilProfile?: boolean;
     baseMapName?: string | null;
+    onHover?: (data: { height: number; lat: number; lon: number } | null) => void;
 }
 
 // Helper to interpolate between pre-parsed colors
@@ -72,7 +73,7 @@ const createSedimentTexture = () => {
     return tex;
 };
 
-export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: number, max: number) => void }> = ({ shape, exaggeration = 100, paletteColors, onHeightRangeChange, showSoilProfile = true, baseMapName = null }) => {
+export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: number, max: number) => void }> = ({ shape, exaggeration = 100, paletteColors, onHeightRangeChange, showSoilProfile = true, baseMapName = null, onHover }) => {
     const [terrainData, setTerrainData] = useState<{ width: number; height: number; data: Float32Array; minHeight: number; maxHeight: number } | null>(null);
     const meshRef = useRef<THREE.Group>(null);
     const sedimentTexture = useMemo(() => createSedimentTexture(), []);
@@ -90,7 +91,10 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
     useEffect(() => {
         if (baseMapName && TERRAIN_CONFIG.BASE_MAPS[baseMapName as keyof typeof TERRAIN_CONFIG.BASE_MAPS]) {
             const urlTemplate = TERRAIN_CONFIG.BASE_MAPS[baseMapName as keyof typeof TERRAIN_CONFIG.BASE_MAPS];
-            const zoom = TERRAIN_CONFIG.BASE_MAP_ZOOM_LEVEL;
+            // Calculate optimal zoom for texture (higher detail than DEM)
+            // Target ~2048 pixels wide for good texture quality
+            const zoom = calculateOptimalZoom(TERRAIN_CONFIG.BOUNDS, 2048, 19);
+            console.log('BaseMap Optimal Zoom:', zoom);
 
             // Calculate tile bounds from BOUNDS (note: latMax goes to minTile.y)
             const minTile = latLonToTile(TERRAIN_CONFIG.BOUNDS.latMax, TERRAIN_CONFIG.BOUNDS.lonMin, zoom);
@@ -190,8 +194,11 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
     }, [baseMapName]);
 
     useEffect(() => {
-        // Load DEM tiles with same zoom level as configured
-        const zoom = TERRAIN_CONFIG.DEM_ZOOM_LEVEL;
+        // Calculate optimal zoom for DEM (Elevation)
+        // Target ~1024 pixels wide for geometry (mesh density)
+        const zoom = calculateOptimalZoom(TERRAIN_CONFIG.BOUNDS, 1024, TERRAIN_CONFIG.DEM_MAX_LEVEL);
+        console.log('DEM Optimal Zoom:', zoom);
+
         fetchTerrainTile(zoom).then(setTerrainData).catch(console.error);
     }, []); // Will reload when component remounts with new BOUNDS
 
@@ -601,13 +608,49 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
             colorArray[i * 3 + 2] = b;
         }
         colorAttr.needsUpdate = true;
-
     }, [topGeometry, visibleRange, paletteColors, baseMapTexture, terrainData?.width, terrainData?.height]);
 
-    // Calculate dynamic Z-scale based on exaggeration
-    // User requirement: Range (1000m) -> 10% of width (10 units).
-    // Factor = 10 / 1000 = 0.01
-    const zScale = 0.01 * (exaggeration / 100);
+    // Calculate dynamic Z-scale based on real-world dimensions
+    // User requirement: Height (meters) should match X/Y (meters).
+    // Mesh is 100 units wide. Real world is N meters wide.
+    // Scale X = 100 / RealWidth.
+    // We apply this scale to Z to ensure 1:1 proportion at 100% exaggeration.
+    const dimensions = useMemo(() => calculateBoundsDimensions(TERRAIN_CONFIG.BOUNDS), []);
+    // We use width (X) as the reference for scaling Z to match.
+    // Ideally, the mesh should also respect aspect ratio, but assuming 100x100:
+    const baseScale = 100 / dimensions.width;
+
+    const zScale = baseScale * (exaggeration / 100);
+
+    const handlePointerMove = (e: THREE.Intersection) => {
+        if (!onHover || !terrainData) return;
+        // e.point is in world space.
+        // World Y = (RawHeight - minHeight) * zScale
+        // RawHeight = (World Y / zScale) + minHeight
+        const worldY = e.point.y;
+        const realHeight = (worldY / zScale) + terrainData.minHeight;
+
+        // Calculate Lat/Lon based on World X/Z
+        // Plane is 100x100 (-50 to 50)
+        // X: -50 (LonMin) -> +50 (LonMax)
+        // Z: -50 (Top/North/LatMax) -> +50 (Bottom/South/LatMin)
+
+        const { x, z } = e.point;
+        const { latMin, latMax, lonMin, lonMax } = TERRAIN_CONFIG.BOUNDS;
+
+        // Normalize X from -50..50 to 0..1
+        const u = (x + 50) / 100;
+        const lon = lonMin + u * (lonMax - lonMin);
+
+        // Normalize Z from -50..50 to 0..1
+        // Z=-50 -> v=0 (Top) -> LatMax
+        // Z=50 -> v=1 (Bottom) -> LatMin
+        const v = (z + 50) / 100;
+        // Linear interpolation: LatMax -> LatMin
+        const lat = latMax + v * (latMin - latMax);
+
+        onHover({ height: realHeight, lat, lon });
+    };
 
     const alphaMap = useMemo(() => {
         if (shape === 'rectangle') return null;
@@ -642,7 +685,18 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
         <group ref={meshRef} rotation={[-Math.PI / 2, 0, 0]}>
             {/* Top Surface */}
             {/* Top Surface - Palette Mode (Vertex Colors) */}
-            <mesh geometry={topGeometry} receiveShadow castShadow scale={[1, 1, zScale]} visible={!baseMapTexture}>
+            <mesh
+                geometry={topGeometry}
+                receiveShadow
+                castShadow
+                scale={[1, 1, zScale]}
+                visible={!baseMapTexture}
+                onPointerMove={(e) => {
+                    e.stopPropagation();
+                    handlePointerMove(e);
+                }}
+                onPointerOut={() => onHover && onHover(null)}
+            >
                 <meshStandardMaterial
                     vertexColors={true}
                     roughness={0.8}
@@ -656,7 +710,18 @@ export const Terrain: React.FC<TerrainProps & { onHeightRangeChange?: (min: numb
 
             {/* Top Surface - Base Map Mode (Texture) */}
             {/* By using two separate meshes/materials, we avoid shader recompilation when toggling mode */}
-            <mesh geometry={topGeometry} receiveShadow castShadow scale={[1, 1, zScale]} visible={!!baseMapTexture}>
+            <mesh
+                geometry={topGeometry}
+                receiveShadow
+                castShadow
+                scale={[1, 1, zScale]}
+                visible={!!baseMapTexture}
+                onPointerMove={(e) => {
+                    e.stopPropagation();
+                    handlePointerMove(e);
+                }}
+                onPointerOut={() => onHover && onHover(null)}
+            >
                 <meshStandardMaterial
                     map={baseMapTexture}
                     vertexColors={false}

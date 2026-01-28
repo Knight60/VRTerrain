@@ -14,10 +14,36 @@ export const getTileXYZ = (lat: number, lon: number, zoom: number) => {
     return { x, y, z: zoom };
 };
 
-export const fetchTerrainTile = async (zoom = 15) => {
+export const calculateOptimalZoom = (bounds: typeof BOUNDS, targetResolution = 1024, maxZoom = TERRAIN_CONFIG.DEM_MAX_LEVEL) => {
+    const latDiff = bounds.latMax - bounds.latMin;
+    const lonDiff = bounds.lonMax - bounds.lonMin;
+    const maxDiff = Math.max(latDiff, lonDiff);
+
+    // We want the total pixels covering 'maxDiff' degrees to be roughly 'targetResolution'
+    // 360 degrees = 256 * 2^z pixels
+    // maxDiff degrees = ? pixels
+    // pixels = (maxDiff / 360) * 256 * 2^z
+    // targetResolution = (maxDiff / 360) * 256 * 2^z
+    // 2^z = (targetResolution * 360) / (256 * maxDiff)
+    // z = log2( (targetResolution * 360) / (256 * maxDiff) )
+
+    if (maxDiff === 0) return maxZoom;
+
+    const z = Math.log2((targetResolution * 360) / (256 * maxDiff));
+    let optimal = Math.floor(z);
+
+    // Clamp
+    // Ensure we don't go below reasonable detail levels (e.g. 8)
+    return Math.max(8, Math.min(optimal, maxZoom));
+};
+
+export const fetchTerrainTile = async (zoom?: number) => {
+    // Determine zoom if not provided
+    const targetZoom = zoom || calculateOptimalZoom(BOUNDS);
+
     // Calculate tile bounds from BOUNDS
-    const minTile = getTileXYZ(BOUNDS.latMax, BOUNDS.lonMin, zoom);
-    const maxTile = getTileXYZ(BOUNDS.latMin, BOUNDS.lonMax, zoom);
+    const minTile = getTileXYZ(BOUNDS.latMax, BOUNDS.lonMin, targetZoom);
+    const maxTile = getTileXYZ(BOUNDS.latMin, BOUNDS.lonMax, targetZoom);
 
     const tilesX = maxTile.x - minTile.x + 1;
     const tilesY = maxTile.y - minTile.y + 1;
@@ -40,8 +66,8 @@ export const fetchTerrainTile = async (zoom = 15) => {
             const tileX = minTile.x + tx;
             const tileY = minTile.y + ty;
 
-            const url = TERRAIN_CONFIG.TERRAIN_TILE_URL
-                .replace('{z}', zoom.toString())
+            const url = TERRAIN_CONFIG.DEM_TILE_URL
+                .replace('{z}', targetZoom.toString())
                 .replace('{x}', tileX.toString())
                 .replace('{y}', tileY.toString());
 
@@ -78,6 +104,7 @@ export const fetchTerrainTile = async (zoom = 15) => {
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
+        // Mapzen Terrarium format: (r * 256 + g + b / 256) - 32768
         const meters = (r * 256 + g + b / 256) - 32768;
 
         elevations[i / 4] = meters;
