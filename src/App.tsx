@@ -25,6 +25,13 @@ function App() {
     const [compassRotation, setCompassRotation] = React.useState(0);
     const [hoverInfo, setHoverInfo] = React.useState<{ height: number; lat: number; lon: number } | null>(null);
     const [isInteracting, setIsInteracting] = React.useState(false);
+    const [showCloudDialog, setShowCloudDialog] = React.useState(false);
+    const [cloudConfig, setCloudConfig] = React.useState({
+        enabled: TERRAIN_CONFIG.CLOUDS.ENABLED,
+        globalHeightOffset: TERRAIN_CONFIG.CLOUDS.GLOBAL_HEIGHT_OFFSET,
+        globalHeightScalar: TERRAIN_CONFIG.CLOUDS.GLOBAL_HEIGHT_SCALAR,
+        layers: TERRAIN_CONFIG.CLOUDS.LAYERS.map(l => ({ ...l }))
+    });
 
     // Toggle helper
     const toggleEffect = (key: keyof typeof TERRAIN_CONFIG.EFFECTS) => {
@@ -241,15 +248,211 @@ function App() {
                                     />
                                     Studio Background
                                 </label>
+                                <button
+                                    onClick={() => setShowCloudDialog(true)}
+                                    className="mt-2 w-full px-3 py-2 rounded-md text-xs font-medium transition-colors border bg-cyan-500/20 border-cyan-500 text-cyan-300 hover:bg-cyan-500/30"
+                                >
+                                    ☁️ Cloud Configuration
+                                </button>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
+            {/* Cloud Configuration Dialog */}
+            {showCloudDialog && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="bg-gray-900/95 border border-white/20 rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-2xl">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold text-emerald-400">☁️ Cloud Configuration</h2>
+                            <button
+                                onClick={() => setShowCloudDialog(false)}
+                                className="text-gray-400 hover:text-white text-2xl leading-none"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        {/* Global Settings */}
+                        <div className="mb-6 p-4 bg-white/5 rounded-lg border border-white/10">
+                            <h3 className="text-sm font-semibold text-cyan-300 mb-3">Global Settings</h3>
+                            <div className="grid grid-cols-2 gap-4">
+                                <label className="flex items-center gap-2 text-xs text-gray-300">
+                                    <input
+                                        type="checkbox"
+                                        checked={cloudConfig.enabled}
+                                        onChange={(e) => setCloudConfig(prev => ({ ...prev, enabled: e.target.checked }))}
+                                        className="accent-emerald-500"
+                                    />
+                                    Enable Clouds
+                                </label>
+                                <div>
+                                    <label className="text-xs text-gray-400">Height Scalar</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={cloudConfig.globalHeightScalar}
+                                        onChange={(e) => setCloudConfig(prev => ({ ...prev, globalHeightScalar: parseFloat(e.target.value) || 0 }))}
+                                        className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-gray-400">Height Offset (km)</label>
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        value={cloudConfig.globalHeightOffset}
+                                        onChange={(e) => setCloudConfig(prev => ({ ...prev, globalHeightOffset: parseFloat(e.target.value) || 0 }))}
+                                        className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Layer Settings */}
+                        {cloudConfig.layers.map((layer, index) => (
+                            <div key={index} className="mb-4 p-4 bg-white/5 rounded-lg border border-white/10">
+                                <h3 className="text-sm font-semibold text-cyan-300 mb-3">Layer {index + 1}</h3>
+                                <div className="grid grid-cols-4 gap-3">
+                                    <div>
+                                        <label className="text-xs text-gray-400">Min Alt (km)</label>
+                                        <input
+                                            type="number"
+                                            step="0.5"
+                                            value={layer.minAlt}
+                                            onChange={(e) => {
+                                                const newLayers = [...cloudConfig.layers];
+                                                newLayers[index] = { ...newLayers[index], minAlt: parseFloat(e.target.value) || 0 };
+                                                setCloudConfig(prev => ({ ...prev, layers: newLayers }));
+                                            }}
+                                            className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-400">Max Alt (km)</label>
+                                        <input
+                                            type="number"
+                                            step="0.5"
+                                            value={layer.maxAlt}
+                                            onChange={(e) => {
+                                                const newLayers = [...cloudConfig.layers];
+                                                newLayers[index] = { ...newLayers[index], maxAlt: parseFloat(e.target.value) || 0 };
+                                                setCloudConfig(prev => ({ ...prev, layers: newLayers }));
+                                            }}
+                                            className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-400">Count</label>
+                                        <input
+                                            type="number"
+                                            step="10"
+                                            value={layer.count}
+                                            onChange={(e) => {
+                                                const newLayers = [...cloudConfig.layers];
+                                                newLayers[index] = { ...newLayers[index], count: parseInt(e.target.value) || 0 };
+                                                setCloudConfig(prev => ({ ...prev, layers: newLayers }));
+                                            }}
+                                            className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-400">Opacity</label>
+                                        <input
+                                            type="number"
+                                            step="0.1"
+                                            min="0"
+                                            max="1"
+                                            value={layer.opacity}
+                                            onChange={(e) => {
+                                                const newLayers = [...cloudConfig.layers];
+                                                newLayers[index] = { ...newLayers[index], opacity: parseFloat(e.target.value) || 0 };
+                                                setCloudConfig(prev => ({ ...prev, layers: newLayers }));
+                                            }}
+                                            className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-400">Min Size</label>
+                                        <input
+                                            type="number"
+                                            step="5"
+                                            value={layer.minSize}
+                                            onChange={(e) => {
+                                                const newLayers = [...cloudConfig.layers];
+                                                newLayers[index] = { ...newLayers[index], minSize: parseInt(e.target.value) || 0 };
+                                                setCloudConfig(prev => ({ ...prev, layers: newLayers }));
+                                            }}
+                                            className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-400">Max Size</label>
+                                        <input
+                                            type="number"
+                                            step="5"
+                                            value={layer.maxSize}
+                                            onChange={(e) => {
+                                                const newLayers = [...cloudConfig.layers];
+                                                newLayers[index] = { ...newLayers[index], maxSize: parseInt(e.target.value) || 0 };
+                                                setCloudConfig(prev => ({ ...prev, layers: newLayers }));
+                                            }}
+                                            className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-400">Speed</label>
+                                        <input
+                                            type="number"
+                                            step="1"
+                                            value={layer.speed}
+                                            onChange={(e) => {
+                                                const newLayers = [...cloudConfig.layers];
+                                                newLayers[index] = { ...newLayers[index], speed: parseFloat(e.target.value) || 0 };
+                                                setCloudConfig(prev => ({ ...prev, layers: newLayers }));
+                                            }}
+                                            className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-400">Color</label>
+                                        <input
+                                            type="color"
+                                            value={layer.color}
+                                            onChange={(e) => {
+                                                const newLayers = [...cloudConfig.layers];
+                                                newLayers[index] = { ...newLayers[index], color: e.target.value };
+                                                setCloudConfig(prev => ({ ...prev, layers: newLayers }));
+                                            }}
+                                            className="w-full mt-1 h-7 bg-black/30 border border-white/20 rounded cursor-pointer"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+
+                        <div className="flex justify-end gap-3 mt-4">
+                            <button
+                                onClick={() => setShowCloudDialog(false)}
+                                className="px-4 py-2 rounded-md text-sm font-medium bg-gray-700 text-gray-300 hover:bg-gray-600"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <Canvas
                 shadows
-                camera={{ position: [50, 40, 80], fov: 45 }}
+                camera={{
+                    // Terrain is 100x100 units. Show with 50% margin = 150 units view.
+                    // FOV 45°, tan(22.5°) ≈ 0.414. Distance = 75 / 0.414 ≈ 181
+                    // Position camera at 45° angle looking down at center
+                    position: [0, 130, 130], // Elevated view with 50% margin
+                    fov: 45
+                }}
                 dpr={[1, 2]}
                 gl={{
                     toneMapping: THREE.ACESFilmicToneMapping,
@@ -299,6 +502,7 @@ function App() {
                         onHover={TERRAIN_CONFIG.ENABLE_HOVER_INFO ? setHoverInfo : undefined}
                         enableMicroDisplacement={enableMicroDisplacement}
                         disableHover={isInteracting}
+                        cloudConfig={cloudConfig}
                     />
 
                     {/* Shadow Plane */}

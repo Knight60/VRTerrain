@@ -3,6 +3,25 @@ import * as THREE from 'three';
 import { fetchTerrainTile, calculateBoundsDimensions, calculateOptimalZoom } from '../utils/terrain';
 import { useThree, useFrame } from '@react-three/fiber';
 import { TERRAIN_CONFIG } from '../config';
+import { Clouds } from './Clouds';
+
+interface CloudLayerConfig {
+    minAlt: number;
+    maxAlt: number;
+    count: number;
+    opacity: number;
+    minSize: number;
+    maxSize: number;
+    speed: number;
+    color: string;
+}
+
+interface CloudConfig {
+    enabled: boolean;
+    globalHeightOffset: number;
+    globalHeightScalar: number;
+    layers: CloudLayerConfig[];
+}
 
 interface TerrainProps {
     shape: 'rectangle' | 'ellipse';
@@ -13,6 +32,7 @@ interface TerrainProps {
     onHover?: (data: { height: number; lat: number; lon: number } | null) => void;
     disableHover?: boolean;
     enableMicroDisplacement?: boolean;
+    cloudConfig?: CloudConfig;
 }
 
 // Helper to interpolate between pre-parsed colors
@@ -76,7 +96,7 @@ const createSedimentTexture = () => {
     return tex;
 };
 
-const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: number, max: number) => void }> = ({ shape, exaggeration = 100, paletteColors, onHeightRangeChange, showSoilProfile = true, baseMapName = null, onHover, disableHover = false, enableMicroDisplacement = true }) => {
+const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: number, max: number) => void }> = ({ shape, exaggeration = 100, paletteColors, onHeightRangeChange, showSoilProfile = true, baseMapName = null, onHover, disableHover = false, enableMicroDisplacement = true, cloudConfig }) => {
     const [terrainData, setTerrainData] = useState<{ width: number; height: number; data: Float32Array; minHeight: number; maxHeight: number } | null>(null);
     const meshRef = useRef<THREE.Group>(null);
     const sedimentTexture = useMemo(() => createSedimentTexture(), []);
@@ -914,6 +934,7 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
                     ))}
                 </>
             )}
+            <Clouds exaggeration={exaggeration} cloudConfig={cloudConfig} />
         </group>
     );
 };

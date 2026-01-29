@@ -16,7 +16,7 @@ export const TERRAIN_CONFIG = {
         latMax: 16.955233,
         lonMax: 101.843331,
     },
-
+    /**/
     // elevation = (r * 256 + g + b / 256) - 32768
     DEM_SRC_NAME: "AWS Terrain Tiles (SRTM)",
     DEM_TILE_URL: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
@@ -38,14 +38,14 @@ export const TERRAIN_CONFIG = {
     SOIL_DEPTH_UNIT: 'percent', // 'meters' or 'percent' of shortest bounds width
 
     // Display Options
-    ENABLE_HOVER_INFO: false, // Show elevation and coordinates on hover
+    ENABLE_HOVER_INFO: true, // Show elevation and coordinates on hover
     SHOW_SOIL_PROFILE: true,
     SHOW_TERRAIN_SHADOW: true,
     ENABLE_MICRO_DISPLACEMENT: true, // Artificial roughness from satellite texture
     MICRO_DISPLACEMENT_INTENSITY: 5.0, // Strength of the displacement effect
 
     AUTO_ROTATE: true, // Automatically rotate the camera around the terrain
-    SHADOW_DISTANCE_VALUE: 1000, // Distance of shadow from terrain base
+    SHADOW_DISTANCE_VALUE: 10, // Distance of shadow from terrain base
     SHADOW_DISTANCE_UNIT: 'percent', // 'meters' or 'percent' of shortest bounds width
 
     // Background Image
@@ -68,8 +68,24 @@ export const TERRAIN_CONFIG = {
         'Google Satellite': 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
         'OpenStreetMap': 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     },
-    DEFAULT_BASE_MAP: null, // null = use color palette, or set to a key from BASE_MAPS
+    DEFAULT_BASE_MAP: 'Google Satellite', // null = use color palette, or set to a key from BASE_MAPS
     BASE_MAP_ZOOM_LEVEL: 18, // Zoom level for base map tiles (higher = more detail)
+
+    // Cloud Settings
+    CLOUDS: {
+        ENABLED: true,
+        GLOBAL_HEIGHT_OFFSET: 0, // Add/subtract km to all clouds
+        GLOBAL_HEIGHT_SCALAR: 0.1, // Scale all cloud heights
+        LAYERS: [
+            // Level 1: Low, Sparse (0.5 - 2 km)
+            { minAlt: 1.0, maxAlt: 7.0, count: 0, opacity: 0.3, minSize: 10, maxSize: 30, speed: 0.5, color: '#ffffff' },
+            // Level 2: Mid, Medium (2 - 6 km)
+            { minAlt: 5.0, maxAlt: 12.0, count: 500, opacity: 0.2, minSize: 70, maxSize: 100, speed: 15, color: '#ffffff' },
+            // Level 3: High, Dense (10 - 20 km)
+            { minAlt: 10.0, maxAlt: 20.0, count: 800, opacity: 0.1, minSize: 100, maxSize: 200, speed: 25, color: '#fff0e0' }
+        ]
+    },
+
     // Visual Effects (Unreal Engine Style)
     EFFECTS: {
         BLOOM: true,
