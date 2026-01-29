@@ -72,22 +72,22 @@ function App() {
                     <div className="mt-4 border-t border-white/10 pt-3 space-y-4">
                         <div>
                             <p className="font-semibold text-emerald-300 mb-2">Display Shape:</p>
-                            <div className="flex gap-2">
+                            <div className="grid grid-cols-2 gap-2">
                                 <button
                                     onClick={() => setShape('rectangle')}
-                                    className={`px - 3 py - 1 rounded - md text - xs font - medium transition - colors border ${shape === 'rectangle'
+                                    className={`px-3 py-2 rounded-md text-xs font-medium transition-colors border text-center ${shape === 'rectangle'
                                         ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
                                         : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
-                                        } `}
+                                        }`}
                                 >
                                     Rectangle
                                 </button>
                                 <button
                                     onClick={() => setShape('ellipse')}
-                                    className={`px - 3 py - 1 rounded - md text - xs font - medium transition - colors border ${shape === 'ellipse'
+                                    className={`px-3 py-2 rounded-md text-xs font-medium transition-colors border text-center ${shape === 'ellipse'
                                         ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
                                         : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10'
-                                        } `}
+                                        }`}
                                 >
                                     Ellipse
                                 </button>
