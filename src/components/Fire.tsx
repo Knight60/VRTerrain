@@ -2,7 +2,7 @@ import React, { useRef, useMemo, useEffect } from 'react';
 import { useFrame, useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
 import { TERRAIN_CONFIG } from '../config';
-import { calculateBoundsDimensions } from '../utils/terrain';
+import { latLonToWorld, getTerrainHeight, calculateBoundsDimensions } from '../utils/terrain';
 
 interface FireProps {
     exaggeration: number;
@@ -16,55 +16,14 @@ interface FireProps {
     config?: {
         enabled: boolean;
         height: number;
+        heightOffset: number;
         spread: number;
         iterations: number;
         octaves: number;
     }
 }
 
-// Convert lat/lon to world coordinates (matching terrain)
-const latLonToWorld = (lat: number, lon: number, bounds: typeof TERRAIN_CONFIG.BOUNDS): [number, number] => {
-    const { latMin, latMax, lonMin, lonMax } = bounds;
 
-    // Normalize to 0-1
-    const nx = (lon - lonMin) / (lonMax - lonMin);
-    const ny = (lat - latMin) / (latMax - latMin);
-
-    // Convert to world coordinates (-50 to 50)
-    const worldX = (nx * 100) - 50;
-    const worldY = 50 - (ny * 100); // Flip Y to match terrain
-
-    return [worldX, worldY];
-};
-
-// Get terrain height at position using the same formula as Terrain.tsx
-const getTerrainHeight = (
-    x: number, y: number,
-    terrainData: FireProps['terrainData'],
-    exaggeration: number
-): number => {
-    if (!terrainData) return 0;
-
-    const { width, height, data, minHeight } = terrainData;
-    const dimensions = calculateBoundsDimensions(TERRAIN_CONFIG.BOUNDS);
-    const unitsPerMeter = 100 / dimensions.width;
-
-    // Convert world coords (-50 to 50) to grid coords (0 to width-1)
-    // X: -50 -> 0, 50 -> width-1
-    // Y: 50 -> 0, -50 -> height-1 (Y is flipped in terrain)
-    const gridX = Math.floor(((x + 50) / 100) * (width - 1));
-    const gridY = Math.floor(((50 - y) / 100) * (height - 1));
-
-    // Clamp to valid range
-    const clampedX = Math.max(0, Math.min(width - 1, gridX));
-    const clampedY = Math.max(0, Math.min(height - 1, gridY));
-
-    const idx = clampedY * width + clampedX;
-    const terrainHeight = data[idx] ?? minHeight;
-
-    // Use same formula as Terrain.tsx: (height - minHeight) * unitsPerMeter * exaggeration/100
-    return (terrainHeight - minHeight) * unitsPerMeter * (exaggeration / 100);
-};
 
 // Fire Shader based on mattatz/THREE.Fire
 // Note: defines are set dynamically based on config
@@ -275,11 +234,12 @@ const FireMesh: React.FC<{
 };
 
 export const Fire: React.FC<FireProps> = ({ exaggeration, terrainData, config }) => {
-    const { ENABLED, HEIGHT, SPREAD, ITERATIONS, OCTAVES } = useMemo(() => {
+    const { ENABLED, HEIGHT, HEIGHT_OFFSET, SPREAD, ITERATIONS, OCTAVES } = useMemo(() => {
         const defaults = TERRAIN_CONFIG.FIRE;
         return {
             ENABLED: config?.enabled ?? defaults.ENABLED,
             HEIGHT: config?.height ?? defaults.HEIGHT,
+            HEIGHT_OFFSET: config?.heightOffset ?? defaults.HEIGHT_OFFSET,
             SPREAD: config?.spread ?? defaults.SPREAD,
             ITERATIONS: config?.iterations ?? defaults.ITERATIONS,
             OCTAVES: config?.octaves ?? defaults.OCTAVES,
@@ -308,17 +268,25 @@ export const Fire: React.FC<FireProps> = ({ exaggeration, terrainData, config })
             const [worldX, worldY] = latLonToWorld(loc.lat, loc.lon, TERRAIN_CONFIG.BOUNDS);
             const terrainZ = getTerrainHeight(worldX, worldY, terrainData, exaggeration);
 
+            // Calculate units per meter for offset
+            const dimensions = calculateBoundsDimensions(TERRAIN_CONFIG.BOUNDS);
+            const unitsPerMeter = 100 / dimensions.width;
+
+            // Apply offset (meters -> world units) * exaggeration
+            // Note: exaggeration is percentage (100 = 1x), so (exaggeration/100)
+            const offsetZ = (HEIGHT_OFFSET * unitsPerMeter) * (exaggeration / 100);
+
             // Fire scale for visual size
             const fireScale = (loc.scale || 1.0) * HEIGHT * SPREAD;
 
             return {
                 key: `fire-${idx}`,
-                // Position fire directly on terrain surface (Z = terrain height)
-                position: [worldX, worldY, terrainZ] as [number, number, number],
+                // Position fire directly on terrain surface + offset
+                position: [worldX, worldY, terrainZ + offsetZ] as [number, number, number],
                 scale: fireScale
             };
         });
-    }, [ENABLED, LOCATIONS, HEIGHT, SPREAD, terrainData, exaggeration]);
+    }, [ENABLED, LOCATIONS, HEIGHT, HEIGHT_OFFSET, SPREAD, terrainData, exaggeration]);
 
     if (!ENABLED || fireInstances.length === 0 || !fireTex) return null;
 

@@ -114,9 +114,10 @@ export const TERRAIN_CONFIG = {
         COLOR_INNER: '#ffaa00',     // Inner flame color (yellow-orange)
         COLOR_OUTER: '#ff3300',     // Outer flame color (red-orange)
         HEIGHT: 2.0,                // Fire height in world units
+        HEIGHT_OFFSET: 10.0,        // Height offset in meters
         SPREAD: 0.5,                // Fire spread radius
         // Performance settings (lower = faster but less quality)
-        ITERATIONS: 10,             // Raymarching iterations (default 20, use 8-12 for mobile)
+        ITERATIONS: 8,              // Raymarching iterations (reduced for performance)
         OCTAVES: 2,                 // Noise octaves (default 3, use 1-2 for mobile)
     },
 

@@ -45,6 +45,7 @@ function App() {
     const [fireConfig, setFireConfig] = React.useState({
         enabled: TERRAIN_CONFIG.FIRE.ENABLED,
         height: TERRAIN_CONFIG.FIRE.HEIGHT,
+        heightOffset: TERRAIN_CONFIG.FIRE.HEIGHT_OFFSET,
         spread: TERRAIN_CONFIG.FIRE.SPREAD,
         iterations: TERRAIN_CONFIG.FIRE.ITERATIONS,
         octaves: TERRAIN_CONFIG.FIRE.OCTAVES,
@@ -614,6 +615,17 @@ function App() {
                             </div>
 
                             <div>
+                                <label className="text-xs text-gray-400">Height Offset (m)</label>
+                                <input
+                                    type="number"
+                                    step="1"
+                                    value={fireConfig.heightOffset}
+                                    onChange={(e) => setFireConfig(prev => ({ ...prev, heightOffset: parseFloat(e.target.value) || 0 }))}
+                                    className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
+                                />
+                            </div>
+
+                            <div>
                                 <label className="text-xs text-gray-400">Fire Spread</label>
                                 <input
                                     type="number"
@@ -676,15 +688,15 @@ function App() {
                     position: [0, 130, 130], // Elevated view with 50% margin
                     fov: 45
                 }}
-                dpr={[1, 2]}
+                dpr={[1, 1.5]}
                 gl={{
-                    toneMapping: THREE.ACESFilmicToneMapping,
-                    toneMappingExposure: effects.BLOOM ? 1.2 : 1.0,
                     alpha: true,
                     premultipliedAlpha: false,
                     antialias: true
                 }}
                 onCreated={({ gl }) => {
+                    gl.toneMapping = THREE.ACESFilmicToneMapping;
+                    gl.toneMappingExposure = 1.0;
                     gl.setClearColor(0x000000, 0); // Fully transparent
                 }}
                 style={{ background: 'transparent' }}
@@ -700,8 +712,8 @@ function App() {
                     position={[100, 100, 50]}
                     intensity={directionalIntensity}
                     castShadow
-                    shadow-mapSize-width={2048}
-                    shadow-mapSize-height={2048}
+                    shadow-mapSize-width={1024}
+                    shadow-mapSize-height={1024}
                     shadow-camera-left={-100}
                     shadow-camera-right={100}
                     shadow-camera-top={100}

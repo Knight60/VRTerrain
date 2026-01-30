@@ -37,6 +37,7 @@ interface ContourConfig {
 interface FireConfig {
     enabled: boolean;
     height: number;
+    heightOffset: number;
     spread: number;
     iterations: number;
     octaves: number;
@@ -188,13 +189,24 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
     // Load base map texture
     const [baseMapTexture, setBaseMapTexture] = useState<THREE.Texture | null>(null);
 
+    // Properly dispose of texture when it changes to prevent memory leaks
     useEffect(() => {
+        return () => {
+            if (baseMapTexture) {
+                baseMapTexture.dispose();
+            }
+        };
+    }, [baseMapTexture]);
+
+    useEffect(() => {
+        let active = true;
+
         if (baseMapName && TERRAIN_CONFIG.BASE_MAPS[baseMapName as keyof typeof TERRAIN_CONFIG.BASE_MAPS]) {
             const urlTemplate = TERRAIN_CONFIG.BASE_MAPS[baseMapName as keyof typeof TERRAIN_CONFIG.BASE_MAPS];
             // Dynamic LOD: Use lodZoom but allow higher res for texture (often avail up to 19)
             // But cap it reasonably (e.g. +3 for 2x more detail than +2)
             const zoom = Math.min(lodZoom + 3, 19);
-            console.log(`BaseMap LOD: ${lodZoom} -> TextureZoom: ${zoom}`);
+            // console.log(`BaseMap LOD: ${lodZoom} -> TextureZoom: ${zoom}`);
 
             // Calculate tile bounds from BOUNDS (note: latMax goes to minTile.y)
             const minTile = latLonToTile(TERRAIN_CONFIG.BOUNDS.latMax, TERRAIN_CONFIG.BOUNDS.lonMin, zoom);
@@ -228,6 +240,7 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
                     const img = new Image();
                     img.crossOrigin = 'anonymous';
                     img.onload = () => {
+                        if (!active) return;
                         ctx.drawImage(img, tx * tileSize, ty * tileSize);
                         loadedCount++;
 
@@ -271,19 +284,21 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
                             texture.repeat.set(uMax - uMin, vMax - vMin);
 
                             texture.needsUpdate = true;
-                            setBaseMapTexture(texture);
+                            if (active) setBaseMapTexture(texture);
                         }
                     };
                     img.onerror = (error) => {
+                        if (!active) return;
                         console.error(`Error loading tile ${tileX},${tileY}:`, error);
-                        loadedCount++;
+                        loadedCount++; // Count errors too so we don't hang if one fails
                         if (loadedCount === totalTiles) {
+                            // Still create texture even if incomplete
                             const texture = new THREE.CanvasTexture(canvas);
                             texture.wrapS = THREE.ClampToEdgeWrapping;
                             texture.wrapT = THREE.ClampToEdgeWrapping;
                             texture.minFilter = THREE.LinearFilter;
                             texture.flipY = true;
-                            setBaseMapTexture(texture);
+                            if (active) setBaseMapTexture(texture);
                         }
                     };
                     img.src = tileUrl;
@@ -292,6 +307,8 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
         } else {
             setBaseMapTexture(null);
         }
+
+        return () => { active = false; };
     }, [baseMapName, lodZoom]); // Added lodZoom dependency
 
     useEffect(() => {

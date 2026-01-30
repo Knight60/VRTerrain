@@ -183,3 +183,71 @@ export const calculateBoundsDimensions = (bounds: typeof TERRAIN_CONFIG.BOUNDS) 
 
     return { width, height, minDimension: Math.min(width, height) };
 };
+
+export const latLonToWorld = (lat: number, lon: number, bounds: typeof TERRAIN_CONFIG.BOUNDS): [number, number] => {
+    const { latMin, latMax, lonMin, lonMax } = bounds;
+
+    // Normalize to 0-1
+    const nLat = (lat - latMin) / (latMax - latMin);
+    const nLon = (lon - lonMin) / (lonMax - lonMin);
+
+    // Map to -50 to 50
+    // X corresponds to Longitude
+    const x = (nLon * 100) - 50;
+
+    // Y corresponds to Latitude (which becomes Z in 3D after rotation, or Y in PlaneGeometry)
+    const y = (nLat * 100) - 50;
+
+    return [x, y];
+};
+
+export const getTerrainHeight = (
+    worldX: number,
+    worldY: number,
+    terrainData: { width: number; height: number; data: Float32Array; minHeight: number, maxHeight: number },
+    exaggeration: number
+): number => {
+    if (!terrainData) return 0;
+    const { width, height, data, minHeight } = terrainData;
+
+    // Convert world (-50 to 50) to grid coordinates
+    // X: -50 -> 0, 50 -> width-1 (West -> East)
+    const gridX = ((worldX + 50) / 100) * (width - 1);
+
+    // Y: 50 -> 0, -50 -> height-1 (North -> South) - Data row 0 is North
+    const gridY = ((50 - worldY) / 100) * (height - 1);
+
+    // Bounds check
+    if (gridX < 0 || gridX >= width - 1 || gridY < 0 || gridY >= height - 1) return 0;
+
+    // Bilinear interpolation
+    const x0 = Math.floor(gridX);
+    const x1 = x0 + 1;
+    const y0 = Math.floor(gridY);
+    const y1 = y0 + 1;
+
+    const tx = gridX - x0;
+    const ty = gridY - y0;
+
+    // Use safe access in case indices are OOB (shouldn't be due to clamps)
+    const idx00 = Math.min((width * height) - 1, y0 * width + x0);
+    const idx10 = Math.min((width * height) - 1, y0 * width + x1);
+    const idx01 = Math.min((width * height) - 1, y1 * width + x0);
+    const idx11 = Math.min((width * height) - 1, y1 * width + x1);
+
+    const z00 = data[idx00];
+    const z10 = data[idx10];
+    const z01 = data[idx01];
+    const z11 = data[idx11];
+
+    const z0 = z00 * (1 - tx) + z10 * tx;
+    const z1 = z01 * (1 - tx) + z11 * tx;
+
+    const elevation = z0 * (1 - ty) + z1 * ty;
+
+    // Convert to world Z
+    const dimensions = calculateBoundsDimensions(TERRAIN_CONFIG.BOUNDS);
+    const unitsPerMeter = 100 / dimensions.width;
+
+    return (elevation - minHeight) * unitsPerMeter * (exaggeration / 100);
+};
