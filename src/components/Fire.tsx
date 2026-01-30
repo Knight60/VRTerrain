@@ -268,7 +268,7 @@ const FireMesh: React.FC<{
                 fragmentShader={FireShader.fragmentShader}
                 transparent
                 depthWrite={false}
-                depthTest={false}
+                depthTest={true}
             />
         </mesh>
     );

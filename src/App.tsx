@@ -50,6 +50,14 @@ function App() {
         octaves: TERRAIN_CONFIG.FIRE.OCTAVES,
     });
 
+    const controlsRef = React.useRef<any>(null);
+
+    const resetNorth = () => {
+        if (controlsRef.current) {
+            controlsRef.current.setAzimuthalAngle(0);
+        }
+    };
+
     // Toggle helper
     const toggleEffect = (key: keyof typeof TERRAIN_CONFIG.EFFECTS) => {
         setEffects(prev => ({ ...prev, [key]: !prev[key] }));
@@ -741,6 +749,7 @@ function App() {
                 </Suspense>
 
                 <OrbitControls
+                    ref={controlsRef}
                     enableDamping
                     dampingFactor={0.05}
                     maxPolarAngle={Math.PI / 2 - 0.05}
@@ -788,7 +797,12 @@ function App() {
             </div>
 
             {/* North Arrow */}
-            <div className="absolute top-1/2 right-8 z-10 pointer-events-none transform -translate-y-1/2">
+            {/* North Arrow */}
+            <div
+                className="absolute top-1/2 right-8 z-10 pointer-events-auto transform -translate-y-1/2 cursor-pointer hover:scale-110 transition-transform duration-200"
+                onClick={resetNorth}
+                title="Reset to North"
+            >
                 <div className="relative w-20 h-20 flex items-center justify-center">
                     {/* Compass Circle */}
                     <div className="absolute inset-0 rounded-full bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 backdrop-blur-md border-2 border-white/30 shadow-2xl"></div>
