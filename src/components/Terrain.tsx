@@ -290,34 +290,37 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
         const metersPerUnit = mapWidthMeters / 100;
         const distMeters = dist * metersPerUnit;
 
-        // Adaptive zoom based on distance (WIDE ranges to reduce reload frequency)
-        // Very close (< 1000m): Use maximum detail (zoom 19)
-        // Close (1000-3000m): High detail (zoom 18)
-        // Medium (3000-7000m): Medium detail (zoom 17)
-        // Far (7000-15000m): Lower detail (zoom 16)
-        // Very far (> 15000m): Lowest detail (zoom 14-15)
-
+        // Adjusted visibility range to be 10 levels with distMeters conditions
+        // Increasing Z level by +1 at same viewing distances
         let targetZoom: number;
-        if (distMeters < 1000) {
-            targetZoom = 19; // Maximum detail for very close views
-        } else if (distMeters < 3000) {
+
+        if (distMeters < 1500) {        // Level 1: Ultra Close
+            targetZoom = 19;
+        } else if (distMeters < 3000) { // Level 2: Extended Zoom 19
+            targetZoom = 19;
+        } else if (distMeters < 4500) { // Level 3: Extended Zoom 19
+            targetZoom = 19;
+        } else if (distMeters < 6000) { // Level 4: High Detail
             targetZoom = 18;
-        } else if (distMeters < 7000) {
+        } else if (distMeters < 7500) { // Level 5
+            targetZoom = 18;
+        } else if (distMeters < 9000) { // Level 6
+            targetZoom = 18;
+        } else if (distMeters < 11000) { // Level 7: Medium Detail
             targetZoom = 17;
-        } else if (distMeters < 15000) {
+        } else if (distMeters < 13000) { // Level 8
+            targetZoom = 17;
+        } else if (distMeters < 15000) { // Level 9
+            targetZoom = 17;
+        } else if (distMeters < 30000) { // Level 10: Far
             targetZoom = 16;
-        } else if (distMeters < 30000) {
+        } else {                         // Fallback
             targetZoom = 15;
-        } else {
-            targetZoom = 14; // Minimum detail for far views
         }
 
-        // Also consider LOD zoom, but distance takes priority
-        // Use the minimum of distance-based and LOD-based zoom
-        const lodBasedZoom = Math.min(lodZoom + 3, 19);
-        const finalZoom = Math.min(targetZoom, lodBasedZoom);
+        const finalZoom = targetZoom; // Prioritize distance-based detail (ignore geometry LOD limit)
 
-        console.log(`📏 Camera distance: ${Math.round(distMeters)}m → baseMap zoom: ${finalZoom} (distance-based: ${targetZoom}, LOD-based: ${lodBasedZoom})`);
+        console.log(`📏 Camera distance: ${Math.round(distMeters)}m → baseMap zoom: ${finalZoom}`);
 
         // CRITICAL SAFETY CAP: 
         // If we are using valid full bounds, we CANNOT load zoom > 16 (40k+ tiles).
@@ -347,8 +350,8 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
         if (baseMapName && TERRAIN_CONFIG.BASE_MAPS[baseMapName as keyof typeof TERRAIN_CONFIG.BASE_MAPS]) {
             const urlTemplate = TERRAIN_CONFIG.BASE_MAPS[baseMapName as keyof typeof TERRAIN_CONFIG.BASE_MAPS];
 
-            // Fixed Zoom for Background (15 gives good clarity ~ 4m/pixel without over-loading)
-            const zoom = 15;
+            // Fixed Zoom for Background (16 gives better clarity ~ 2m/pixel)
+            const zoom = 16;
             const bounds = TERRAIN_CONFIG.BOUNDS;
 
             console.log(`🌍 Base Layer Loading: Zoom ${zoom} (Fixed)`);
@@ -359,7 +362,7 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
             const tilesX = maxTile.x - minTile.x + 1;
             const tilesY = maxTile.y - minTile.y + 1;
 
-            if (tilesX * tilesY > 100) { // Limit background usage
+            if (tilesX * tilesY > 400) { // Limit background usage
                 console.warn(`Base layer too large (${tilesX * tilesY}), capping.`);
             }
 
