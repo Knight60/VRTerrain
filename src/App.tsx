@@ -26,11 +26,28 @@ function App() {
     const [hoverInfo, setHoverInfo] = React.useState<{ height: number; lat: number; lon: number } | null>(null);
     const [isInteracting, setIsInteracting] = React.useState(false);
     const [showCloudDialog, setShowCloudDialog] = React.useState(false);
+    const [showContourDialog, setShowContourDialog] = React.useState(false);
+    const [showFireDialog, setShowFireDialog] = React.useState(false);
     const [cloudConfig, setCloudConfig] = React.useState({
         enabled: TERRAIN_CONFIG.CLOUDS.ENABLED,
         globalHeightOffset: TERRAIN_CONFIG.CLOUDS.GLOBAL_HEIGHT_OFFSET,
         globalHeightScalar: TERRAIN_CONFIG.CLOUDS.GLOBAL_HEIGHT_SCALAR,
         layers: TERRAIN_CONFIG.CLOUDS.LAYERS.map(l => ({ ...l }))
+    });
+    const [contourConfig, setContourConfig] = React.useState({
+        enabled: TERRAIN_CONFIG.CONTOURS.ENABLED,
+        interval: TERRAIN_CONFIG.CONTOURS.INTERVAL,
+        majorInterval: TERRAIN_CONFIG.CONTOURS.MAJOR_INTERVAL,
+        showLabels: TERRAIN_CONFIG.CONTOURS.SHOW_LABELS,
+        minorOpacity: TERRAIN_CONFIG.CONTOURS.MINOR_LINE_OPACITY,
+        majorOpacity: TERRAIN_CONFIG.CONTOURS.MAJOR_LINE_OPACITY,
+    });
+    const [fireConfig, setFireConfig] = React.useState({
+        enabled: TERRAIN_CONFIG.FIRE.ENABLED,
+        height: TERRAIN_CONFIG.FIRE.HEIGHT,
+        spread: TERRAIN_CONFIG.FIRE.SPREAD,
+        iterations: TERRAIN_CONFIG.FIRE.ITERATIONS,
+        octaves: TERRAIN_CONFIG.FIRE.OCTAVES,
     });
 
     // Toggle helper
@@ -254,6 +271,18 @@ function App() {
                                 >
                                     ☁️ Cloud Configuration
                                 </button>
+                                <button
+                                    onClick={() => setShowContourDialog(true)}
+                                    className="mt-2 w-full px-3 py-2 rounded-md text-xs font-medium transition-colors border bg-amber-500/20 border-amber-500 text-amber-300 hover:bg-amber-500/30"
+                                >
+                                    📊 Contour Configuration
+                                </button>
+                                <button
+                                    onClick={() => setShowFireDialog(true)}
+                                    className="mt-2 w-full px-3 py-2 rounded-md text-xs font-medium transition-colors border bg-orange-500/20 border-orange-500 text-orange-300 hover:bg-orange-500/30"
+                                >
+                                    🔥 Fire Configuration
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -444,6 +473,192 @@ function App() {
                 </div>
             )}
 
+            {/* Contour Configuration Dialog */}
+            {showContourDialog && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="bg-gray-900/95 border border-white/20 rounded-xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto shadow-2xl">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold text-amber-400">📊 Contour Configuration</h2>
+                            <button
+                                onClick={() => setShowContourDialog(false)}
+                                className="text-gray-400 hover:text-white text-2xl leading-none"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <label className="flex items-center gap-2 text-sm text-gray-300">
+                                <input
+                                    type="checkbox"
+                                    checked={contourConfig.enabled}
+                                    onChange={(e) => setContourConfig(prev => ({ ...prev, enabled: e.target.checked }))}
+                                    className="accent-amber-500"
+                                />
+                                Enable Contour Lines
+                            </label>
+
+                            <div>
+                                <label className="text-xs text-gray-400">Minor Interval (m)</label>
+                                <input
+                                    type="number"
+                                    step="5"
+                                    value={contourConfig.interval}
+                                    onChange={(e) => setContourConfig(prev => ({ ...prev, interval: parseInt(e.target.value) || 20 }))}
+                                    className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="text-xs text-gray-400">Major Interval (m)</label>
+                                <input
+                                    type="number"
+                                    step="10"
+                                    value={contourConfig.majorInterval}
+                                    onChange={(e) => setContourConfig(prev => ({ ...prev, majorInterval: parseInt(e.target.value) || 100 }))}
+                                    className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
+                                />
+                            </div>
+
+                            <label className="flex items-center gap-2 text-sm text-gray-300">
+                                <input
+                                    type="checkbox"
+                                    checked={contourConfig.showLabels}
+                                    onChange={(e) => setContourConfig(prev => ({ ...prev, showLabels: e.target.checked }))}
+                                    className="accent-amber-500"
+                                />
+                                Show Labels
+                            </label>
+
+                            <div>
+                                <label className="text-xs text-gray-400">Minor Line Opacity: {contourConfig.minorOpacity.toFixed(2)}</label>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="1"
+                                    step="0.1"
+                                    value={contourConfig.minorOpacity}
+                                    onChange={(e) => setContourConfig(prev => ({ ...prev, minorOpacity: parseFloat(e.target.value) }))}
+                                    className="w-full mt-1 accent-amber-500"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="text-xs text-gray-400">Major Line Opacity: {contourConfig.majorOpacity.toFixed(2)}</label>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="1"
+                                    step="0.1"
+                                    value={contourConfig.majorOpacity}
+                                    onChange={(e) => setContourConfig(prev => ({ ...prev, majorOpacity: parseFloat(e.target.value) }))}
+                                    className="w-full mt-1 accent-amber-500"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3 mt-4">
+                            <button
+                                onClick={() => setShowContourDialog(false)}
+                                className="px-4 py-2 rounded-md text-sm font-medium bg-gray-700 text-gray-300 hover:bg-gray-600"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Fire Configuration Dialog */}
+            {showFireDialog && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="bg-gray-900/95 border border-white/20 rounded-xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto shadow-2xl">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold text-orange-400">🔥 Fire Configuration</h2>
+                            <button
+                                onClick={() => setShowFireDialog(false)}
+                                className="text-gray-400 hover:text-white text-2xl leading-none"
+                            >
+                                ×
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <label className="flex items-center gap-2 text-sm text-gray-300">
+                                <input
+                                    type="checkbox"
+                                    checked={fireConfig.enabled}
+                                    onChange={(e) => setFireConfig(prev => ({ ...prev, enabled: e.target.checked }))}
+                                    className="accent-orange-500"
+                                />
+                                Enable Fire Effects
+                            </label>
+
+                            <div>
+                                <label className="text-xs text-gray-400">Fire Height</label>
+                                <input
+                                    type="number"
+                                    step="0.5"
+                                    value={fireConfig.height}
+                                    onChange={(e) => setFireConfig(prev => ({ ...prev, height: parseFloat(e.target.value) || 2 }))}
+                                    className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="text-xs text-gray-400">Fire Spread</label>
+                                <input
+                                    type="number"
+                                    step="0.1"
+                                    value={fireConfig.spread}
+                                    onChange={(e) => setFireConfig(prev => ({ ...prev, spread: parseFloat(e.target.value) || 0.5 }))}
+                                    className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
+                                />
+                            </div>
+
+                            <div className="border-t border-white/10 pt-4 mt-4">
+                                <h3 className="text-sm font-semibold text-orange-300 mb-3">Performance Settings</h3>
+
+                                <div>
+                                    <label className="text-xs text-gray-400">Iterations (8-20, lower = faster)</label>
+                                    <input
+                                        type="number"
+                                        min="4"
+                                        max="30"
+                                        step="2"
+                                        value={fireConfig.iterations}
+                                        onChange={(e) => setFireConfig(prev => ({ ...prev, iterations: parseInt(e.target.value) || 10 }))}
+                                        className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
+                                    />
+                                </div>
+
+                                <div className="mt-3">
+                                    <label className="text-xs text-gray-400">Octaves (1-3, lower = faster)</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="4"
+                                        step="1"
+                                        value={fireConfig.octaves}
+                                        onChange={(e) => setFireConfig(prev => ({ ...prev, octaves: parseInt(e.target.value) || 2 }))}
+                                        className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3 mt-4">
+                            <button
+                                onClick={() => setShowFireDialog(false)}
+                                className="px-4 py-2 rounded-md text-sm font-medium bg-gray-700 text-gray-300 hover:bg-gray-600"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <Canvas
                 shadows
                 camera={{
@@ -503,6 +718,8 @@ function App() {
                         enableMicroDisplacement={enableMicroDisplacement}
                         disableHover={isInteracting}
                         cloudConfig={cloudConfig}
+                        contourConfig={contourConfig}
+                        fireConfig={fireConfig}
                     />
 
                     {/* Shadow Plane */}
@@ -563,7 +780,8 @@ function App() {
             }
 
             <div className="absolute bottom-6 right-6 z-10 text-right pointer-events-none">
-                <div className="text-white/40 text-xs space-y-1">
+                <div className="text-gray/40 text-xs space-y-1">
+                    <p>Developed by Pisut.Nak</p>
                     <p>Powered by Vite + React + Three.js</p>
                     <p>Controls: LMB Rotate | RMB Pan | Scroll Zoom</p>
                 </div>

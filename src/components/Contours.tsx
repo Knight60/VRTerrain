@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import * as THREE from 'three';
-import { Text, Line } from '@react-three/drei';
+import { Text, Line, Billboard } from '@react-three/drei';
 import { TERRAIN_CONFIG } from '../config';
 import { calculateBoundsDimensions } from '../utils/terrain';
 
@@ -13,7 +13,31 @@ interface ContoursProps {
         maxHeight: number;
     };
     exaggeration: number;
+    shape: 'rectangle' | 'ellipse';
+    config?: {
+        enabled: boolean;
+        interval: number;
+        majorInterval: number;
+        showLabels: boolean;
+        minorOpacity: number;
+        majorOpacity: number;
+    }
 }
+
+// Helper to check if a point is inside the shape
+const isPointInShape = (x: number, y: number, shape: 'rectangle' | 'ellipse'): boolean => {
+    // World coordinates are -50 to 50 for both X and Y
+    const halfSize = 50;
+
+    if (shape === 'rectangle') {
+        return Math.abs(x) <= halfSize && Math.abs(y) <= halfSize;
+    } else {
+        // Ellipse: (x/a)^2 + (y/b)^2 <= 1
+        const nx = x / halfSize;
+        const ny = y / halfSize;
+        return (nx * nx + ny * ny) <= 1;
+    }
+};
 
 // Marching squares algorithm to extract contour lines
 const extractContourLines = (
@@ -100,8 +124,24 @@ const extractContourLines = (
     return lines;
 };
 
-export const Contours: React.FC<ContoursProps> = ({ terrainData, exaggeration }) => {
-    const { ENABLED, INTERVAL, LINE_COLOR, LINE_WIDTH, LINE_OPACITY, SHOW_LABELS, LABEL_COLOR, LABEL_SIZE, MAJOR_INTERVAL, MAJOR_LINE_WIDTH } = TERRAIN_CONFIG.CONTOURS;
+export const Contours: React.FC<ContoursProps> = ({ terrainData, exaggeration, shape, config }) => {
+    const {
+        ENABLED, INTERVAL, MAJOR_INTERVAL,
+        MINOR_LINE_COLOR, MINOR_LINE_WIDTH, MINOR_LINE_OPACITY,
+        MAJOR_LINE_COLOR, MAJOR_LINE_WIDTH, MAJOR_LINE_OPACITY,
+        SHOW_LABELS, LABEL_COLOR, LABEL_BASE_SIZE
+    } = useMemo(() => {
+        const defaults = TERRAIN_CONFIG.CONTOURS;
+        return {
+            ...defaults,
+            ENABLED: config?.enabled ?? defaults.ENABLED,
+            INTERVAL: config?.interval ?? defaults.INTERVAL,
+            MAJOR_INTERVAL: config?.majorInterval ?? defaults.MAJOR_INTERVAL,
+            SHOW_LABELS: config?.showLabels ?? defaults.SHOW_LABELS,
+            MINOR_LINE_OPACITY: config?.minorOpacity ?? defaults.MINOR_LINE_OPACITY,
+            MAJOR_LINE_OPACITY: config?.majorOpacity ?? defaults.MAJOR_LINE_OPACITY,
+        };
+    }, [config]);
 
     const contourData = useMemo(() => {
         if (!ENABLED || !terrainData) return { lines: [], labels: [], minHeight: 0, unitsPerMeter: 1 };
@@ -135,42 +175,64 @@ export const Contours: React.FC<ContoursProps> = ({ terrainData, exaggeration })
             if (segments.length > 0) {
                 const isMajor = elev % MAJOR_INTERVAL === 0;
 
-                // Transform segments to world coordinates
+                // Transform segments to world coordinates and clip to shape
                 // X: 0 -> -50, width-1 -> 50
                 // Y: 0 -> 50 (top), height-1 -> -50 (bottom) - flip Y!
-                const worldSegments = segments.map(seg =>
-                    seg.map(([x, y]) => [
+                const worldSegments: [number, number][][] = [];
+
+                segments.forEach(seg => {
+                    const transformedSeg = seg.map(([x, y]) => [
                         x * scaleX - 50,
                         50 - y * scaleY  // Flip Y axis
-                    ] as [number, number])
-                );
+                    ] as [number, number]);
 
-                allLines.push({ elevation: elev, segments: worldSegments, isMajor });
+                    // Filter points based on shape
+                    const clippedSeg: [number, number][] = [];
+                    transformedSeg.forEach(([x, y]) => {
+                        if (isPointInShape(x, y, shape)) {
+                            clippedSeg.push([x, y]);
+                        } else if (clippedSeg.length > 0) {
+                            // When we exit the shape, save current segment and start new
+                            if (clippedSeg.length >= 2) {
+                                worldSegments.push([...clippedSeg]);
+                            }
+                            clippedSeg.length = 0;
+                        }
+                    });
+                    // Push remaining clipped segment
+                    if (clippedSeg.length >= 2) {
+                        worldSegments.push(clippedSeg);
+                    }
+                });
 
-                // Add label for major contours
-                if (isMajor && SHOW_LABELS && worldSegments.length > 0) {
-                    // Find a good position for label (middle of a segment)
-                    const midSegment = worldSegments[Math.floor(worldSegments.length / 2)];
-                    if (midSegment && midSegment.length >= 2) {
-                        const midPoint = [
-                            (midSegment[0][0] + midSegment[1][0]) / 2,
-                            (midSegment[0][1] + midSegment[1][1]) / 2
-                        ];
-                        // Z position: (height in meters) * unitsPerMeter * exaggeration
-                        const z = ((elev - minHeight) * heightMultiplier) + 0.2;
-                        labels.push({
-                            position: [midPoint[0], midPoint[1], z],
-                            text: `${elev}m`
-                        });
+                if (worldSegments.length > 0) {
+                    allLines.push({ elevation: elev, segments: worldSegments, isMajor });
+
+                    // Add label only for major contours
+                    if (isMajor && SHOW_LABELS && worldSegments.length > 0) {
+                        // Find a good position for label (middle of a segment)
+                        const midSegment = worldSegments[Math.floor(worldSegments.length / 2)];
+                        if (midSegment && midSegment.length >= 2) {
+                            const midPoint = [
+                                (midSegment[0][0] + midSegment[1][0]) / 2,
+                                (midSegment[0][1] + midSegment[1][1]) / 2
+                            ];
+                            // Z position: (height in meters) * unitsPerMeter * exaggeration
+                            const z = ((elev - minHeight) * heightMultiplier) + 0.3;
+                            labels.push({
+                                position: [midPoint[0], midPoint[1], z],
+                                text: `${elev}m`
+                            });
+                        }
                     }
                 }
             }
         }
 
         return { lines: allLines, labels, minHeight, unitsPerMeter };
-    }, [terrainData, ENABLED, INTERVAL, MAJOR_INTERVAL, SHOW_LABELS, exaggeration]);
+    }, [terrainData, ENABLED, INTERVAL, MAJOR_INTERVAL, SHOW_LABELS, exaggeration, shape]);
 
-    if (!ENABLED || !terrainData) return null;
+
 
     // Get scale factors from contour data
     const { minHeight, unitsPerMeter } = contourData;
@@ -178,13 +240,13 @@ export const Contours: React.FC<ContoursProps> = ({ terrainData, exaggeration })
     const heightMultiplier = unitsPerMeter * (exaggeration / 100);
 
     // Batch all contour lines into merged geometries for performance
-    const { normalGeometry, majorGeometry } = useMemo(() => {
-        const normalPoints: number[] = [];
+    const { minorGeometry, majorGeometry } = useMemo(() => {
+        const minorPoints: number[] = [];
         const majorPoints: number[] = [];
 
         contourData.lines.forEach((contour) => {
             const z = ((contour.elevation - minHeight) * heightMultiplier) + 0.1;
-            const targetArray = contour.isMajor ? majorPoints : normalPoints;
+            const targetArray = contour.isMajor ? majorPoints : minorPoints;
 
             contour.segments.forEach((segment) => {
                 if (segment.length < 2) return;
@@ -200,9 +262,9 @@ export const Contours: React.FC<ContoursProps> = ({ terrainData, exaggeration })
             });
         });
 
-        const normalGeo = new THREE.BufferGeometry();
-        if (normalPoints.length > 0) {
-            normalGeo.setAttribute('position', new THREE.Float32BufferAttribute(normalPoints, 3));
+        const minorGeo = new THREE.BufferGeometry();
+        if (minorPoints.length > 0) {
+            minorGeo.setAttribute('position', new THREE.Float32BufferAttribute(minorPoints, 3));
         }
 
         const majorGeo = new THREE.BufferGeometry();
@@ -210,50 +272,56 @@ export const Contours: React.FC<ContoursProps> = ({ terrainData, exaggeration })
             majorGeo.setAttribute('position', new THREE.Float32BufferAttribute(majorPoints, 3));
         }
 
-        return { normalGeometry: normalGeo, majorGeometry: majorGeo };
+        return { minorGeometry: minorGeo, majorGeometry: majorGeo };
     }, [contourData, minHeight, heightMultiplier]);
 
     return (
         <group>
-            {/* Normal Contour Lines - single batched geometry */}
-            {normalGeometry.attributes.position && (
-                <lineSegments geometry={normalGeometry}>
+            {/* Minor Contour Lines (gray, thinner) */}
+            {minorGeometry.attributes.position && (
+                <lineSegments geometry={minorGeometry}>
                     <lineBasicMaterial
-                        color={LINE_COLOR}
+                        color={MINOR_LINE_COLOR}
                         transparent
-                        opacity={LINE_OPACITY}
-                        linewidth={LINE_WIDTH}
+                        opacity={MINOR_LINE_OPACITY}
+                        linewidth={MINOR_LINE_WIDTH}
                     />
                 </lineSegments>
             )}
 
-            {/* Major Contour Lines - single batched geometry */}
+            {/* Major Contour Lines (darker, thicker) */}
             {majorGeometry.attributes.position && (
                 <lineSegments geometry={majorGeometry}>
                     <lineBasicMaterial
-                        color={LINE_COLOR}
+                        color={MAJOR_LINE_COLOR}
                         transparent
-                        opacity={LINE_OPACITY}
+                        opacity={MAJOR_LINE_OPACITY}
                         linewidth={MAJOR_LINE_WIDTH}
                     />
                 </lineSegments>
             )}
 
-            {/* Labels - only for major contours, limited count for performance */}
-            {SHOW_LABELS && contourData.labels.slice(0, 20).map((label, idx) => (
-                <Text
+            {/* Labels - billboard style, always facing camera */}
+            {SHOW_LABELS && contourData.labels.slice(0, 30).map((label, idx) => (
+                <Billboard
                     key={`label-${idx}`}
-                    position={label.position}
-                    fontSize={LABEL_SIZE}
-                    color={LABEL_COLOR}
-                    anchorX="center"
-                    anchorY="middle"
-                    rotation={[-Math.PI / 2, 0, 0]}
-                    outlineWidth={0.05}
-                    outlineColor="#ffffff"
+                    position={[label.position[0], label.position[1], label.position[2]]}
+                    follow={true}
+                    lockX={false}
+                    lockY={false}
+                    lockZ={false}
                 >
-                    {label.text}
-                </Text>
+                    <Text
+                        fontSize={LABEL_BASE_SIZE}
+                        color={LABEL_COLOR}
+                        anchorX="center"
+                        anchorY="bottom"
+                        outlineWidth={0.02}
+                        outlineColor="#ffffff"
+                    >
+                        {label.text}
+                    </Text>
+                </Billboard>
             ))}
         </group>
     );

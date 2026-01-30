@@ -5,6 +5,7 @@ import { useThree, useFrame } from '@react-three/fiber';
 import { TERRAIN_CONFIG } from '../config';
 import { Clouds } from './Clouds';
 import { Contours } from './Contours';
+import { Fire } from './Fire';
 
 interface CloudLayerConfig {
     minAlt: number;
@@ -24,6 +25,23 @@ interface CloudConfig {
     layers: CloudLayerConfig[];
 }
 
+interface ContourConfig {
+    enabled: boolean;
+    interval: number;
+    majorInterval: number;
+    showLabels: boolean;
+    minorOpacity: number;
+    majorOpacity: number;
+}
+
+interface FireConfig {
+    enabled: boolean;
+    height: number;
+    spread: number;
+    iterations: number;
+    octaves: number;
+}
+
 interface TerrainProps {
     shape: 'rectangle' | 'ellipse';
     exaggeration: number;
@@ -34,6 +52,8 @@ interface TerrainProps {
     disableHover?: boolean;
     enableMicroDisplacement?: boolean;
     cloudConfig?: CloudConfig;
+    contourConfig?: ContourConfig;
+    fireConfig?: FireConfig;
 }
 
 // Helper to interpolate between pre-parsed colors
@@ -97,7 +117,7 @@ const createSedimentTexture = () => {
     return tex;
 };
 
-const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: number, max: number) => void }> = ({ shape, exaggeration = 100, paletteColors, onHeightRangeChange, showSoilProfile = true, baseMapName = null, onHover, disableHover = false, enableMicroDisplacement = true, cloudConfig }) => {
+const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: number, max: number) => void }> = ({ shape, exaggeration = 100, paletteColors, onHeightRangeChange, showSoilProfile = true, baseMapName = null, onHover, disableHover = false, enableMicroDisplacement = true, cloudConfig, contourConfig, fireConfig }) => {
     const [terrainData, setTerrainData] = useState<{ width: number; height: number; data: Float32Array; minHeight: number; maxHeight: number } | null>(null);
     const meshRef = useRef<THREE.Group>(null);
     const sedimentTexture = useMemo(() => createSedimentTexture(), []);
@@ -935,7 +955,8 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
                     ))}
                 </>
             )}
-            {terrainData && <Contours terrainData={terrainData} exaggeration={exaggeration} />}
+            {terrainData && <Contours terrainData={terrainData} exaggeration={exaggeration} shape={shape} config={contourConfig} />}
+            {terrainData && <Fire exaggeration={exaggeration} terrainData={terrainData} config={fireConfig} />}
             <Clouds exaggeration={exaggeration} cloudConfig={cloudConfig} />
         </group>
     );

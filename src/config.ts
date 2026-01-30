@@ -73,7 +73,7 @@ export const TERRAIN_CONFIG = {
 
     // Cloud Settings
     CLOUDS: {
-        ENABLED: true,
+        ENABLED: false,
         GLOBAL_HEIGHT_OFFSET: 0, // Add/subtract km to all clouds
         GLOBAL_HEIGHT_SCALAR: 0.1, // Scale all cloud heights
         LAYERS: [
@@ -89,15 +89,35 @@ export const TERRAIN_CONFIG = {
     // Contour Lines Settings
     CONTOURS: {
         ENABLED: true,              // Show/hide contour lines
-        INTERVAL: 20,               // Contour interval in meters
-        LINE_COLOR: '#000000',      // Color of contour lines
-        LINE_WIDTH: 1.5,            // Width of contour lines
-        LINE_OPACITY: 0.6,          // Opacity of contour lines (0-1)
+        INTERVAL: 20,               // Minor contour interval in meters
+        MAJOR_INTERVAL: 100,        // Major contour interval (every 5 minor = 100m)
+        // Minor contours (every 20m)
+        MINOR_LINE_COLOR: '#686868ff', // Gray for minor lines
+        MINOR_LINE_WIDTH: 1.0,       // Thinner
+        MINOR_LINE_OPACITY: 0.5,     // More transparent
+        // Major contours (every 100m)
+        MAJOR_LINE_COLOR: '#333333', // Darker for major lines
+        MAJOR_LINE_WIDTH: 2.0,       // Thicker
+        MAJOR_LINE_OPACITY: 0.7,     // More visible
+        // Labels
         SHOW_LABELS: true,          // Show elevation labels
-        LABEL_COLOR: '#000000',     // Color of labels
-        LABEL_SIZE: 0.8,            // Size of labels
-        MAJOR_INTERVAL: 100,        // Major contour interval (thicker line)
-        MAJOR_LINE_WIDTH: 2.5,      // Width of major contour lines
+        LABEL_COLOR: '#222222',     // Dark color for labels
+        LABEL_BASE_SIZE: 0.5,       // Base size of labels
+    },
+
+    // Fire Effect Settings
+    FIRE: {
+        ENABLED: true,
+        LOCATIONS: [
+            { lat: 16.868028, lon: 101.781342, scale: 1.0, intensity: 1.0 },
+        ],
+        COLOR_INNER: '#ffaa00',     // Inner flame color (yellow-orange)
+        COLOR_OUTER: '#ff3300',     // Outer flame color (red-orange)
+        HEIGHT: 2.0,                // Fire height in world units
+        SPREAD: 0.5,                // Fire spread radius
+        // Performance settings (lower = faster but less quality)
+        ITERATIONS: 10,             // Raymarching iterations (default 20, use 8-12 for mobile)
+        OCTAVES: 2,                 // Noise octaves (default 3, use 1-2 for mobile)
     },
 
     // Visual Effects (Unreal Engine Style)
