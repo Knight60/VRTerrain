@@ -120,20 +120,28 @@ const createSedimentTexture = () => {
 
 const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: number, max: number) => void }> = ({ shape, exaggeration = 100, paletteColors, onHeightRangeChange, showSoilProfile = true, baseMapName = null, onHover, disableHover = false, enableMicroDisplacement = true, cloudConfig, contourConfig, fireConfig }) => {
     const [terrainData, setTerrainData] = useState<{ width: number; height: number; data: Float32Array; minHeight: number; maxHeight: number } | null>(null);
+    const [previousTerrainData, setPreviousTerrainData] = useState<typeof terrainData>(null);
+    const [isLoadingTerrain, setIsLoadingTerrain] = useState(false);
     const meshRef = useRef<THREE.Group>(null);
     const sedimentTexture = useMemo(() => createSedimentTexture(), []);
     const lastHoverUpdate = useRef(0);
     const { camera } = useThree();
 
-    // LOD State
+    // LOD State with optimized update frequency
     const [lodZoom, setLodZoom] = useState<number>(() => calculateOptimalZoom(TERRAIN_CONFIG.BOUNDS, 1024, 12));
     const lastLodCheck = useRef(0);
     const currentLodZoom = useRef(lodZoom);
+    const [isLodTransitioning, setIsLodTransitioning] = useState(false);
 
-    // Dynamic LOD Monitoring
+    // Smart Texture Loading: Use partial bounds for high zoom to prevent 40k+ tile loads
+    const [activeTextureBounds, setActiveTextureBounds] = useState(TERRAIN_CONFIG.BOUNDS);
+    const lastTextureCenter = useRef(new THREE.Vector3(99999, 99999, 99999)); // Force update on first close approach
+
+    // Dynamic LOD Monitoring - Optimized for performance
     useFrame(() => {
         const now = Date.now();
-        if (now - lastLodCheck.current < 500) return; // Check every 500ms
+        // Increased check interval to 2 seconds to reduce frequent updates
+        if (now - lastLodCheck.current < 2000) return;
         lastLodCheck.current = now;
 
         // Calculate distance to center (approx) or altitude
@@ -171,11 +179,90 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
         // Clamp to Max DEM Level
         targetZ = Math.min(targetZ, TERRAIN_CONFIG.DEM_MAX_LEVEL);
 
-        // Only update if changed by > 0 (integer steps)
-        if (targetZ !== currentLodZoom.current) {
+        // Add hysteresis: Only update if zoom changes by at least 2 levels to prevent flickering
+        const zoomDiff = Math.abs(targetZ - currentLodZoom.current);
+        if (zoomDiff >= 2) {
             currentLodZoom.current = targetZ;
+            setIsLodTransitioning(true);
             setLodZoom(targetZ);
-            // console.log(`LOD Update: Dist ${Math.round(distMeters)}m -> Zoom ${targetZ}`);
+
+            // Calculate visible bounds based on distance
+            // When close (dist < 100), use smaller bounds
+            // When far (dist > 150), use full bounds
+            let newVisibleBounds = TERRAIN_CONFIG.BOUNDS;
+
+            if (distMeters < 5000) {
+                // Close up: use only center portion
+                const { latMin, latMax, lonMin, lonMax } = TERRAIN_CONFIG.BOUNDS;
+                const centerLat = (latMin + latMax) / 2;
+                const centerLon = (lonMin + lonMax) / 2;
+
+                // Calculate visible fraction (20% to 100%)
+                const fraction = Math.min(1.0, Math.max(0.15, distMeters / 5000));
+
+                const latRange = (latMax - latMin) * fraction;
+                const lonRange = (lonMax - lonMin) * fraction;
+
+                // newVisibleBounds = {
+                //     latMin: centerLat - latRange / 2,
+                //     latMax: centerLat + latRange / 2,
+                //     lonMin: centerLon - lonRange / 2,
+                //     lonMax: centerLon + lonRange / 2
+                // };
+            }
+
+            // setVisibleBounds(newVisibleBounds); // DISABLED
+
+            // Reset transition flag after a delay
+            setTimeout(() => setIsLodTransitioning(false), 1000);
+        }
+
+        // --- Smart Texture Update Logic ---
+        // Dynamically update texture bounds when zoomed in (BaseMap Zoom >= 16 approx 15km)
+        // If close to ground (< 15000m), use partial texture bounds to allow high zoom (18-19)
+        if (distMeters < 15000) {
+            const distToLast = camera.position.distanceTo(lastTextureCenter.current);
+            const distMetersToLast = distToLast * metersPerUnit;
+
+            // Only update if moved significantly (> 500m) to prevent frequent reloading
+            if (distMetersToLast > 500) {
+                const fullLatRange = TERRAIN_CONFIG.BOUNDS.latMax - TERRAIN_CONFIG.BOUNDS.latMin;
+                const fullLonRange = TERRAIN_CONFIG.BOUNDS.lonMax - TERRAIN_CONFIG.BOUNDS.lonMin;
+                const centerLat = (TERRAIN_CONFIG.BOUNDS.latMin + TERRAIN_CONFIG.BOUNDS.latMax) / 2;
+                const centerLon = (TERRAIN_CONFIG.BOUNDS.lonMin + TERRAIN_CONFIG.BOUNDS.lonMax) / 2;
+
+                // Map Camera Pos (-50 to 50) to Lat/Lon offsets
+                // World X+ is East (+Lon)
+                // World Z+ is South (-Lat) (Assuming Camera looks down Z and Z is inverted Mesh Y)
+                const lonOffset = (camera.position.x / 100) * fullLonRange;
+                const latOffset = (-camera.position.z / 100) * fullLatRange;
+
+                const targetCenterLat = centerLat + latOffset;
+                const targetCenterLon = centerLon + lonOffset;
+
+                // View Size: ~3000m buffer box (covers Zoom 16 view with margin)
+                const viewSizeMeters = 3000;
+                const viewFraction = Math.min(1.0, viewSizeMeters / (mapWidthMeters || 10000));
+
+                const latSize = fullLatRange * viewFraction;
+                const lonSize = fullLonRange * viewFraction;
+
+                const newBounds = {
+                    latMin: Math.max(TERRAIN_CONFIG.BOUNDS.latMin, targetCenterLat - latSize / 2),
+                    latMax: Math.min(TERRAIN_CONFIG.BOUNDS.latMax, targetCenterLat + latSize / 2),
+                    lonMin: Math.max(TERRAIN_CONFIG.BOUNDS.lonMin, targetCenterLon - lonSize / 2),
+                    lonMax: Math.min(TERRAIN_CONFIG.BOUNDS.lonMax, targetCenterLon + lonSize / 2)
+                };
+
+                setActiveTextureBounds(newBounds);
+                lastTextureCenter.current.copy(camera.position);
+                console.log(`🖼️ Smart Bounds Update: Moved ${Math.round(distMetersToLast)}m -> Reloading Partial Texture`);
+            }
+        } else if (activeTextureBounds !== TERRAIN_CONFIG.BOUNDS) {
+            // Zoomed out: Reset to full bounds
+            setActiveTextureBounds(TERRAIN_CONFIG.BOUNDS);
+            lastTextureCenter.current.set(99999, 99999, 99999);
+            console.log(`🖼️ Smart Bounds Reset: Full Map Mode`);
         }
     });
 
@@ -188,6 +275,61 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
 
     // Load base map texture
     const [baseMapTexture, setBaseMapTexture] = useState<THREE.Texture | null>(null);
+    const [detailMapTexture, setDetailMapTexture] = useState<THREE.Texture | null>(null);
+
+    // Memoize zoom calculation based on BOTH lodZoom AND camera distance
+    // Closer to camera = higher zoom (more detail), farther = lower zoom (less detail)
+    const baseMapZoom = useMemo(() => {
+        if (!baseMapName) return 0;
+
+        // Calculate camera distance to terrain center
+        const dist = camera.position.distanceTo(new THREE.Vector3(0, 0, 0));
+
+        // Calculate distance in meters (approximate)
+        const mapWidthMeters = calculateBoundsDimensions(TERRAIN_CONFIG.BOUNDS).width;
+        const metersPerUnit = mapWidthMeters / 100;
+        const distMeters = dist * metersPerUnit;
+
+        // Adaptive zoom based on distance (WIDE ranges to reduce reload frequency)
+        // Very close (< 1000m): Use maximum detail (zoom 19)
+        // Close (1000-3000m): High detail (zoom 18)
+        // Medium (3000-7000m): Medium detail (zoom 17)
+        // Far (7000-15000m): Lower detail (zoom 16)
+        // Very far (> 15000m): Lowest detail (zoom 14-15)
+
+        let targetZoom: number;
+        if (distMeters < 1000) {
+            targetZoom = 19; // Maximum detail for very close views
+        } else if (distMeters < 3000) {
+            targetZoom = 18;
+        } else if (distMeters < 7000) {
+            targetZoom = 17;
+        } else if (distMeters < 15000) {
+            targetZoom = 16;
+        } else if (distMeters < 30000) {
+            targetZoom = 15;
+        } else {
+            targetZoom = 14; // Minimum detail for far views
+        }
+
+        // Also consider LOD zoom, but distance takes priority
+        // Use the minimum of distance-based and LOD-based zoom
+        const lodBasedZoom = Math.min(lodZoom + 3, 19);
+        const finalZoom = Math.min(targetZoom, lodBasedZoom);
+
+        console.log(`📏 Camera distance: ${Math.round(distMeters)}m → baseMap zoom: ${finalZoom} (distance-based: ${targetZoom}, LOD-based: ${lodBasedZoom})`);
+
+        // CRITICAL SAFETY CAP: 
+        // If we are using valid full bounds, we CANNOT load zoom > 16 (40k+ tiles).
+        // Only allow > 16 if activeTextureBounds is partial (different from full bounds)
+        // Note: Object comparison needs reference check.
+        if (activeTextureBounds === TERRAIN_CONFIG.BOUNDS && finalZoom > 16) {
+            console.warn(`⚠️ Cap zoom to 16 because using Full Bounds (prevent crash)`);
+            return 16;
+        }
+
+        return finalZoom;
+    }, [baseMapName, lodZoom, activeTextureBounds]); // Re-calculate when LOD changes or bounds change
 
     // Properly dispose of texture when it changes to prevent memory leaks
     useEffect(() => {
@@ -198,24 +340,29 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
         };
     }, [baseMapTexture]);
 
+    // EFFECT 1: Load BASE MAP (Background, Low-Res, Full Extent)
     useEffect(() => {
         let active = true;
 
         if (baseMapName && TERRAIN_CONFIG.BASE_MAPS[baseMapName as keyof typeof TERRAIN_CONFIG.BASE_MAPS]) {
             const urlTemplate = TERRAIN_CONFIG.BASE_MAPS[baseMapName as keyof typeof TERRAIN_CONFIG.BASE_MAPS];
-            // Dynamic LOD: Use lodZoom but allow higher res for texture (often avail up to 19)
-            // But cap it reasonably (e.g. +3 for 2x more detail than +2)
-            const zoom = Math.min(lodZoom + 3, 19);
-            // console.log(`BaseMap LOD: ${lodZoom} -> TextureZoom: ${zoom}`);
 
-            // Calculate tile bounds from BOUNDS (note: latMax goes to minTile.y)
-            const minTile = latLonToTile(TERRAIN_CONFIG.BOUNDS.latMax, TERRAIN_CONFIG.BOUNDS.lonMin, zoom);
-            const maxTile = latLonToTile(TERRAIN_CONFIG.BOUNDS.latMin, TERRAIN_CONFIG.BOUNDS.lonMax, zoom);
+            // Fixed Zoom for Background (15 gives good clarity ~ 4m/pixel without over-loading)
+            const zoom = 15;
+            const bounds = TERRAIN_CONFIG.BOUNDS;
+
+            console.log(`🌍 Base Layer Loading: Zoom ${zoom} (Fixed)`);
+
+            const minTile = latLonToTile(bounds.latMax, bounds.lonMin, zoom);
+            const maxTile = latLonToTile(bounds.latMin, bounds.lonMax, zoom);
 
             const tilesX = maxTile.x - minTile.x + 1;
             const tilesY = maxTile.y - minTile.y + 1;
 
-            // Create a canvas to composite all tiles
+            if (tilesX * tilesY > 100) { // Limit background usage
+                console.warn(`Base layer too large (${tilesX * tilesY}), capping.`);
+            }
+
             const canvas = document.createElement('canvas');
             const tileSize = 256;
             canvas.width = tilesX * tileSize;
@@ -223,103 +370,189 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
             const ctx = canvas.getContext('2d');
             if (!ctx) return;
 
-            // Load all tiles
             let loadedCount = 0;
             const totalTiles = tilesX * tilesY;
+
+            const finishBaseTexture = () => {
+                if (!active) return;
+
+                // Helper functions are simpler here since we use Full Bounds
+                const latLonToPixel = (lat: number, lon: number, zoom: number) => {
+                    const scale = Math.pow(2, zoom);
+                    const worldX = (lon + 180) / 360 * scale;
+                    const worldY = (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * scale;
+                    return { x: worldX * 256, y: worldY * 256 };
+                };
+
+                const minPixel = latLonToPixel(bounds.latMax, bounds.lonMin, zoom);
+                const maxPixel = latLonToPixel(bounds.latMin, bounds.lonMax, zoom);
+                const minTilePixelX = minTile.x * 256;
+                const minTilePixelY = minTile.y * 256;
+
+                const uMin = (minPixel.x - minTilePixelX) / canvas.width;
+                const vMin = (minPixel.y - minTilePixelY) / canvas.height;
+                const uMax = (maxPixel.x - minTilePixelX) / canvas.width;
+                const vMax = (maxPixel.y - minTilePixelY) / canvas.height;
+
+                const texture = new THREE.CanvasTexture(canvas);
+                texture.wrapS = THREE.ClampToEdgeWrapping;
+                texture.wrapT = THREE.ClampToEdgeWrapping;
+                texture.minFilter = THREE.LinearFilter;
+                texture.flipY = true;
+
+                texture.offset.set(uMin, 1 - vMax);
+                texture.repeat.set(uMax - uMin, vMax - vMin);
+
+                texture.needsUpdate = true;
+                setBaseMapTexture(texture);
+            };
 
             for (let ty = 0; ty < tilesY; ty++) {
                 for (let tx = 0; tx < tilesX; tx++) {
                     const tileX = minTile.x + tx;
                     const tileY = minTile.y + ty;
-
-                    const tileUrl = urlTemplate
-                        .replace('{x}', tileX.toString())
-                        .replace('{y}', tileY.toString())
-                        .replace('{z}', zoom.toString());
+                    const tileUrl = urlTemplate.replace('{x}', tileX.toString()).replace('{y}', tileY.toString()).replace('{z}', zoom.toString());
 
                     const img = new Image();
-                    img.crossOrigin = 'anonymous';
+                    img.crossOrigin = 'Anonymous';
                     img.onload = () => {
                         if (!active) return;
                         ctx.drawImage(img, tx * tileSize, ty * tileSize);
                         loadedCount++;
-
-                        if (loadedCount === totalTiles) {
-                            // All tiles loaded, calculate precise UV mapping
-                            // Calculate the exact position of BOUNDS within the tile grid
-
-                            // Helper: convert lat/lon to exact pixel position within tile
-                            const latLonToPixel = (lat: number, lon: number, zoom: number) => {
-                                const scale = Math.pow(2, zoom);
-                                const worldX = (lon + 180) / 360 * scale;
-                                const worldY = (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * scale;
-                                return { x: worldX * 256, y: worldY * 256 };
-                            };
-
-                            const minPixel = latLonToPixel(TERRAIN_CONFIG.BOUNDS.latMax, TERRAIN_CONFIG.BOUNDS.lonMin, zoom);
-                            const maxPixel = latLonToPixel(TERRAIN_CONFIG.BOUNDS.latMin, TERRAIN_CONFIG.BOUNDS.lonMax, zoom);
-
-                            // Calculate UV coordinates relative to the composite canvas
-                            const minTilePixelX = minTile.x * 256;
-                            const minTilePixelY = minTile.y * 256;
-
-                            const uMin = (minPixel.x - minTilePixelX) / canvas.width;
-                            const vMin = (minPixel.y - minTilePixelY) / canvas.height;
-                            const uMax = (maxPixel.x - minTilePixelX) / canvas.width;
-                            const vMax = (maxPixel.y - minTilePixelY) / canvas.height;
-
-                            // Create texture
-                            const texture = new THREE.CanvasTexture(canvas);
-                            texture.wrapS = THREE.ClampToEdgeWrapping;
-                            texture.wrapT = THREE.ClampToEdgeWrapping;
-                            texture.minFilter = THREE.LinearFilter;
-                            texture.flipY = true;
-
-                            // Store UV bounds in texture for later use
-                            // (texture as any).uvBounds = { uMin, vMin, uMax, vMax };
-
-                            // Apply texture transform to map the specific bounds to the 0..1 UV space of the mesh
-                            // Note: V is inverted because Canvas Y is Top-Down, but Texture UV is Bottom-Up (with flipY=true)
-                            texture.offset.set(uMin, 1 - vMax);
-                            texture.repeat.set(uMax - uMin, vMax - vMin);
-
-                            texture.needsUpdate = true;
-                            if (active) setBaseMapTexture(texture);
-                        }
+                        if (loadedCount === totalTiles) finishBaseTexture();
                     };
-                    img.onerror = (error) => {
-                        if (!active) return;
-                        console.error(`Error loading tile ${tileX},${tileY}:`, error);
-                        loadedCount++; // Count errors too so we don't hang if one fails
-                        if (loadedCount === totalTiles) {
-                            // Still create texture even if incomplete
-                            const texture = new THREE.CanvasTexture(canvas);
-                            texture.wrapS = THREE.ClampToEdgeWrapping;
-                            texture.wrapT = THREE.ClampToEdgeWrapping;
-                            texture.minFilter = THREE.LinearFilter;
-                            texture.flipY = true;
-                            if (active) setBaseMapTexture(texture);
-                        }
-                    };
+                    img.onerror = () => { loadedCount++; if (loadedCount === totalTiles) finishBaseTexture(); };
                     img.src = tileUrl;
                 }
             }
         } else {
             setBaseMapTexture(null);
         }
-
         return () => { active = false; };
-    }, [baseMapName, lodZoom]); // Added lodZoom dependency
+    }, [baseMapName]);
+
+    // EFFECT 2: Load DETAIL MAP (High-Res, Partial Extent, Overlay)
+    useEffect(() => {
+        let active = true;
+
+        if (baseMapName && TERRAIN_CONFIG.BASE_MAPS[baseMapName as keyof typeof TERRAIN_CONFIG.BASE_MAPS]) {
+            const urlTemplate = TERRAIN_CONFIG.BASE_MAPS[baseMapName as keyof typeof TERRAIN_CONFIG.BASE_MAPS];
+            const bounds = activeTextureBounds;
+
+            // If using FULL bounds, we don't need Detail Layer (Base Layer handles it)
+            if (bounds === TERRAIN_CONFIG.BOUNDS) {
+                setDetailMapTexture(null);
+                return;
+            }
+
+            const zoom = baseMapZoom; // High Res (18-19)
+            console.log(`🔎 Detail Layer Loading: Zoom ${zoom} (Partial)`);
+
+            const minTile = latLonToTile(bounds.latMax, bounds.lonMin, zoom);
+            const maxTile = latLonToTile(bounds.latMin, bounds.lonMax, zoom);
+
+            const tilesX = maxTile.x - minTile.x + 1;
+            const tilesY = maxTile.y - minTile.y + 1;
+
+            if (tilesX * tilesY > 2500) return; // Safety
+
+            const canvas = document.createElement('canvas');
+            const tileSize = 256;
+            const padding = 2; // Padding
+            canvas.width = tilesX * tileSize + padding * 2;
+            canvas.height = tilesY * tileSize + padding * 2;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+
+            // CLEAR with Transparent (Instead of Soil Color) to act as Overlay
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            let loadedCount = 0;
+            const totalTiles = tilesX * tilesY;
+            if (totalTiles === 0) return;
+
+            const finishDetailTexture = () => {
+                if (!active) return;
+
+                const latLonToPixel = (lat: number, lon: number, zoom: number) => {
+                    const scale = Math.pow(2, zoom);
+                    const worldX = (lon + 180) / 360 * scale;
+                    const worldY = (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * scale;
+                    return { x: worldX * 256, y: worldY * 256 };
+                };
+
+                const minPixel = latLonToPixel(TERRAIN_CONFIG.BOUNDS.latMax, TERRAIN_CONFIG.BOUNDS.lonMin, zoom);
+                const maxPixel = latLonToPixel(TERRAIN_CONFIG.BOUNDS.latMin, TERRAIN_CONFIG.BOUNDS.lonMax, zoom);
+                const minTilePixelX = minTile.x * 256;
+                const minTilePixelY = minTile.y * 256;
+
+                // Adjust uMin for Padding and Partial Offset
+                const uMin = (minPixel.x - minTilePixelX + padding) / canvas.width;
+                const vMin = (minPixel.y - minTilePixelY + padding) / canvas.height;
+                const uMax = (maxPixel.x - minTilePixelX + padding) / canvas.width;
+                const vMax = (maxPixel.y - minTilePixelY + padding) / canvas.height;
+
+                const texture = new THREE.CanvasTexture(canvas);
+                texture.wrapS = THREE.ClampToEdgeWrapping;
+                texture.wrapT = THREE.ClampToEdgeWrapping;
+                texture.minFilter = THREE.LinearFilter;
+                texture.flipY = true;
+
+                texture.offset.set(uMin, 1 - vMax);
+                texture.repeat.set(uMax - uMin, vMax - vMin);
+                texture.needsUpdate = true;
+                setDetailMapTexture(texture);
+            };
+
+            for (let ty = 0; ty < tilesY; ty++) {
+                for (let tx = 0; tx < tilesX; tx++) {
+                    const tileX = minTile.x + tx;
+                    const tileY = minTile.y + ty;
+                    const tileUrl = urlTemplate.replace('{x}', tileX.toString()).replace('{y}', tileY.toString()).replace('{z}', zoom.toString());
+
+                    const img = new Image();
+                    img.crossOrigin = 'Anonymous';
+                    img.onload = () => {
+                        if (!active) return;
+                        ctx.drawImage(img, tx * tileSize + padding, ty * tileSize + padding);
+                        loadedCount++;
+                        if (loadedCount === totalTiles) finishDetailTexture();
+                    };
+                    img.onerror = () => { loadedCount++; if (loadedCount === totalTiles) finishDetailTexture(); };
+                    img.src = tileUrl;
+                }
+            }
+        } else {
+            setDetailMapTexture(null);
+        }
+        return () => { active = false; };
+    }, [baseMapName, baseMapZoom, activeTextureBounds]);
 
     useEffect(() => {
-        // Fetch DEM with dynamic LOD
-        console.log(`DEM LOD Update: Zoom ${lodZoom}`);
+        // Fetch DEM with dynamic LOD - using FULL bounds (not visibleBounds)
+        // Progressive Loading: Keep previous data while loading new data
+        console.log(`DEM LOD Update: Zoom ${lodZoom}, using full TERRAIN_CONFIG.BOUNDS`);
+
+        setIsLoadingTerrain(true);
         let active = true;
-        fetchTerrainTile(lodZoom).then(data => {
-            if (active) setTerrainData(data);
-        }).catch(console.error);
+
+        fetchTerrainTile(lodZoom, TERRAIN_CONFIG.BOUNDS).then(data => {
+            if (active) {
+                // Save previous data before updating
+                setPreviousTerrainData(terrainData);
+                setTerrainData(data);
+                setIsLoadingTerrain(false);
+            }
+        }).catch(error => {
+            console.error('Failed to load terrain:', error);
+            if (active) {
+                setIsLoadingTerrain(false);
+                // Keep previous data on error
+            }
+        });
+
         return () => { active = false; };
-    }, [lodZoom]); // Reload when lodZoom changes
+    }, [lodZoom]); // Only reload when lodZoom changes (not on pan!)
 
     // Calculate visible range based on shape
     const visibleRange = useMemo(() => {
@@ -366,9 +599,42 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
         const { min: visibleMin, max: visibleMax } = visibleRange;
 
         // --- Top Surface ---
-        const geo = new THREE.PlaneGeometry(100, 100, width - 1, height - 1);
+        // PERFORMANCE OPTIMIZATION: Limit geometry resolution to prevent slowdowns
+        // High zoom levels can have 256x256+ DEM data = 65k+ vertices = VERY SLOW!
+        // Solution: Downsample geometry while keeping texture quality
+
+        const MAX_GEOMETRY_RES = 128; // Limit to 128x128 = 16,384 vertices max
+        const actualWidth = Math.min(width, MAX_GEOMETRY_RES);
+        const actualHeight = Math.min(height, MAX_GEOMETRY_RES);
+
+        const geo = new THREE.PlaneGeometry(100, 100, actualWidth - 1, actualHeight - 1);
+
+        console.log(`🔺 Geometry: ${actualWidth}x${actualHeight} (${actualWidth * actualHeight} vertices) from DEM ${width}x${height}`);
+
         const count = geo.attributes.position.count;
         const arr = geo.attributes.position.array;
+
+        // Downsample DEM data to match geometry resolution if needed
+        let sampledData: Float32Array;
+        if (actualWidth < width || actualHeight < height) {
+            // Need to downsample DEM data
+            sampledData = new Float32Array(actualWidth * actualHeight);
+
+            for (let gy = 0; gy < actualHeight; gy++) {
+                for (let gx = 0; gx < actualWidth; gx++) {
+                    // Map geometry coordinate to DEM coordinate
+                    const demX = Math.floor((gx / (actualWidth - 1)) * (width - 1));
+                    const demY = Math.floor((gy / (actualHeight - 1)) * (height - 1));
+                    const demIdx = demY * width + demX;
+                    const geoIdx = gy * actualWidth + gx;
+
+                    sampledData[geoIdx] = data[demIdx] || minHeight;
+                }
+            }
+        } else {
+            // No downsampling needed
+            sampledData = data;
+        }
 
         // Initialize vertex colors buffer (allocated but not computed yet)
         const colors = new Float32Array(count * 3);
@@ -377,7 +643,7 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
         // Store original height data as custom attribute
         const heightData = new Float32Array(geo.attributes.position.count);
         for (let i = 0; i < heightData.length; i++) {
-            heightData[i] = data[i] || minHeight;
+            heightData[i] = sampledData[i] || minHeight;
         }
         geo.setAttribute('heightData', new THREE.BufferAttribute(heightData, 1));
 
@@ -386,8 +652,8 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
         const currentMultiplier = exaggeration / 100;
 
         for (let i = 0; i < count; i++) {
-            // Use DEM data directly without rotation
-            const rawHeight = data[i] || minHeight;
+            // Use downsampled DEM data
+            const rawHeight = sampledData[i] || minHeight;
             const relativeHeight = rawHeight - minHeight;
             arr[i * 3 + 2] = relativeHeight * currentMultiplier;
 
@@ -680,8 +946,13 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
         // We no longer modify UVs for the Base Map; we modify the texture offset/repeat instead.
         // However, since we previously mutated UVs, we must reset them here to be safe.
         const uvArray = uvAttr.array as Float32Array;
-        const widthSegments = (terrainData?.width || 2) - 1;
-        const heightSegments = (terrainData?.height || 2) - 1;
+        // Logic must match geometry generation (MAX_GEOMETRY_RES = 128)
+        const MAX_GEOMETRY_RES = 128;
+        const tWidth = terrainData?.width || 2;
+        const tHeight = terrainData?.height || 2;
+        // Use the actual geometry resolution for UV mapping to match vertex topology
+        const widthSegments = Math.min(tWidth, MAX_GEOMETRY_RES) - 1;
+        const heightSegments = Math.min(tHeight, MAX_GEOMETRY_RES) - 1;
 
         for (let i = 0; i < count; i++) {
             const ix = i % (widthSegments + 1);
@@ -709,9 +980,10 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
 
         // --- MICRO-DISPLACEMENT LOGIC ---
         // Enhanced detail from texture for Satellite maps at high zoom
+        // Disabled during LOD transitions for better performance
         let displacementData: Float32Array | null = null;
 
-        const applyDisplacement = enableMicroDisplacement && baseMapName === 'Google Satellite' && lodZoom >= TERRAIN_CONFIG.DEM_MAX_LEVEL && baseMapTexture && baseMapTexture.image;
+        const applyDisplacement = enableMicroDisplacement && !isLodTransitioning && !disableHover && baseMapName === 'Google Satellite' && lodZoom >= TERRAIN_CONFIG.DEM_MAX_LEVEL && baseMapTexture && baseMapTexture.image;
 
         if (applyDisplacement) {
             try {
@@ -936,8 +1208,7 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
                 />
             </mesh>
 
-            {/* Top Surface - Base Map Mode (Texture) */}
-            {/* By using two separate meshes/materials, we avoid shader recompilation when toggling mode */}
+            {/* Top Surface - Base Map Mode (Background) */}
             <mesh
                 geometry={topGeometry}
                 receiveShadow
@@ -953,11 +1224,38 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
                 <meshStandardMaterial
                     map={baseMapTexture}
                     vertexColors={false}
+                    roughness={0.9}
+                    metalness={0.0}
+                    side={THREE.DoubleSide}
+                    alphaMap={alphaMap}
+                    transparent={shape === 'ellipse'}
+                    alphaTest={shape === 'ellipse' ? 0.1 : 0}
+                />
+            </mesh>
+
+            {/* Top Surface - Detail Map Mode (High Res Overlay) */}
+            <mesh
+                geometry={topGeometry}
+                // No shadows for overlay
+                scale={[1, 1, baseScale]}
+                visible={!!detailMapTexture}
+                renderOrder={1}
+                onPointerMove={onHover ? (e) => {
+                    e.stopPropagation();
+                    handlePointerMove(e);
+                } : undefined}
+                onPointerOut={onHover ? () => onHover(null) : undefined}
+            >
+                <meshStandardMaterial
+                    map={detailMapTexture}
+                    vertexColors={false}
                     roughness={0.8}
                     metalness={0.1}
                     side={THREE.DoubleSide}
                     alphaMap={alphaMap}
-                    transparent={shape === 'ellipse'}
+                    transparent={true}
+                    polygonOffset={true}
+                    polygonOffsetFactor={-1}
                     alphaTest={shape === 'ellipse' ? 0.1 : 0}
                 />
             </mesh>

@@ -692,7 +692,10 @@ function App() {
                 gl={{
                     alpha: true,
                     premultipliedAlpha: false,
-                    antialias: true
+                    antialias: true,
+                    powerPreference: "high-performance",
+                    stencil: false,
+                    depth: true
                 }}
                 onCreated={({ gl }) => {
                     gl.toneMapping = THREE.ACESFilmicToneMapping;
@@ -700,6 +703,8 @@ function App() {
                     gl.setClearColor(0x000000, 0); // Fully transparent
                 }}
                 style={{ background: 'transparent' }}
+                performance={{ min: 0.5 }}
+                frameloop="always"
             >
                 {/* Atmosphere & Lighting */}
                 {/* <fog attach="fog" args={[fogColor, fogNear, fogFar]} /> */}
@@ -763,7 +768,10 @@ function App() {
                 <OrbitControls
                     ref={controlsRef}
                     enableDamping
-                    dampingFactor={0.05}
+                    dampingFactor={0.03}
+                    rotateSpeed={1.0}
+                    zoomSpeed={1.2}
+                    panSpeed={0.8}
                     maxPolarAngle={Math.PI / 2 - 0.05}
                     minDistance={10}
                     maxDistance={250}

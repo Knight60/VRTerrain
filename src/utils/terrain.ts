@@ -37,9 +37,12 @@ export const calculateOptimalZoom = (bounds: typeof BOUNDS, targetResolution = 1
     return Math.max(8, Math.min(optimal, maxZoom));
 };
 
-export const fetchTerrainTile = async (zoom?: number) => {
+export const fetchTerrainTile = async (zoom?: number, customBounds?: typeof BOUNDS) => {
+    // Use custom bounds or default to config bounds
+    const bounds = customBounds || BOUNDS;
+
     // Determine zoom if not provided
-    const targetZoom = zoom || calculateOptimalZoom(BOUNDS);
+    const targetZoom = zoom || calculateOptimalZoom(bounds);
 
     // Helper to calculate exact pixel coordinates in Mercator projection
     const getProjectedPixel = (lat: number, lon: number, z: number) => {
@@ -50,13 +53,27 @@ export const fetchTerrainTile = async (zoom?: number) => {
         return { x, y };
     };
 
-    // Calculate tile bounds from BOUNDS
-    const minTile = getTileXYZ(BOUNDS.latMax, BOUNDS.lonMin, targetZoom);
-    const maxTile = getTileXYZ(BOUNDS.latMin, BOUNDS.lonMax, targetZoom);
+    // Calculate tile bounds from bounds
+    const minTile = getTileXYZ(bounds.latMax, bounds.lonMin, targetZoom);
+    const maxTile = getTileXYZ(bounds.latMin, bounds.lonMax, targetZoom);
+
+    const tilesX = maxTile.x - minTile.x + 1;
+    const tilesY = maxTile.y - minTile.y + 1;
+    const totalTiles = tilesX * tilesY;
+
+    // CRITICAL: Limit maximum tiles to prevent browser freeze
+    const MAX_TILES = 100; // Maximum 100 tiles (e.g., 10x10)
+
+    if (totalTiles > MAX_TILES) {
+        console.warn(`Tile count (${totalTiles}) exceeds maximum (${MAX_TILES}). ` +
+            `This may cause performance issues. Consider reducing bounds or zoom level.`);
+    }
+
+    console.log(`Loading ${totalTiles} tiles (${tilesX}x${tilesY}) at zoom ${targetZoom}`);
 
     // Calculate exact pixel crop area relative to the topleft of the minTile
-    const topLeftPixel = getProjectedPixel(BOUNDS.latMax, BOUNDS.lonMin, targetZoom);
-    const bottomRightPixel = getProjectedPixel(BOUNDS.latMin, BOUNDS.lonMax, targetZoom);
+    const topLeftPixel = getProjectedPixel(bounds.latMax, bounds.lonMin, targetZoom);
+    const bottomRightPixel = getProjectedPixel(bounds.latMin, bounds.lonMax, targetZoom);
 
     // Origin of the composite canvas in world pixel space
     const originX = minTile.x * 256;
@@ -69,8 +86,6 @@ export const fetchTerrainTile = async (zoom?: number) => {
     const cropWidth = Math.ceil(bottomRightPixel.x - originX) - cropX;
     const cropHeight = Math.ceil(bottomRightPixel.y - originY) - cropY;
 
-    const tilesX = maxTile.x - minTile.x + 1;
-    const tilesY = maxTile.y - minTile.y + 1;
     const tileSize = 256;
 
     // Create composite canvas

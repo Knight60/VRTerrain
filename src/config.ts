@@ -42,7 +42,7 @@ export const TERRAIN_CONFIG = {
     SHOW_SOIL_PROFILE: true,
     SHOW_TERRAIN_SHADOW: true,
     ENABLE_MICRO_DISPLACEMENT: true, // Artificial roughness from satellite texture
-    MICRO_DISPLACEMENT_INTENSITY: 5.0, // Strength of the displacement effect
+    MICRO_DISPLACEMENT_INTENSITY: 3.0, // Strength of the displacement effect (reduced for better performance)
 
     AUTO_ROTATE: true, // Automatically rotate the camera around the terrain
     SHADOW_DISTANCE_VALUE: 10, // Distance of shadow from terrain base
@@ -114,11 +114,11 @@ export const TERRAIN_CONFIG = {
         COLOR_INNER: '#ffaa00',     // Inner flame color (yellow-orange)
         COLOR_OUTER: '#ff3300',     // Outer flame color (red-orange)
         HEIGHT: 2.0,                // Fire height in world units
-        HEIGHT_OFFSET: 10.0,        // Height offset in meters
+        HEIGHT_OFFSET: 20.0,        // Height offset in meters
         SPREAD: 0.5,                // Fire spread radius
         // Performance settings (lower = faster but less quality)
-        ITERATIONS: 8,              // Raymarching iterations (reduced for performance)
-        OCTAVES: 2,                 // Noise octaves (default 3, use 1-2 for mobile)
+        ITERATIONS: 6,              // Raymarching iterations (reduced for better performance)
+        OCTAVES: 1,                 // Noise octaves (reduced for better performance)
     },
 
     // Visual Effects (Unreal Engine Style)
