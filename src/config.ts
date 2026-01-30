@@ -86,6 +86,20 @@ export const TERRAIN_CONFIG = {
         ]
     },
 
+    // Contour Lines Settings
+    CONTOURS: {
+        ENABLED: true,              // Show/hide contour lines
+        INTERVAL: 20,               // Contour interval in meters
+        LINE_COLOR: '#000000',      // Color of contour lines
+        LINE_WIDTH: 1.5,            // Width of contour lines
+        LINE_OPACITY: 0.6,          // Opacity of contour lines (0-1)
+        SHOW_LABELS: true,          // Show elevation labels
+        LABEL_COLOR: '#000000',     // Color of labels
+        LABEL_SIZE: 0.8,            // Size of labels
+        MAJOR_INTERVAL: 100,        // Major contour interval (thicker line)
+        MAJOR_LINE_WIDTH: 2.5,      // Width of major contour lines
+    },
+
     // Visual Effects (Unreal Engine Style)
     EFFECTS: {
         BLOOM: true,

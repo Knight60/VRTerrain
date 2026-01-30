@@ -4,6 +4,7 @@ import { fetchTerrainTile, calculateBoundsDimensions, calculateOptimalZoom } fro
 import { useThree, useFrame } from '@react-three/fiber';
 import { TERRAIN_CONFIG } from '../config';
 import { Clouds } from './Clouds';
+import { Contours } from './Contours';
 
 interface CloudLayerConfig {
     minAlt: number;
@@ -934,6 +935,7 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
                     ))}
                 </>
             )}
+            {terrainData && <Contours terrainData={terrainData} exaggeration={exaggeration} />}
             <Clouds exaggeration={exaggeration} cloudConfig={cloudConfig} />
         </group>
     );
