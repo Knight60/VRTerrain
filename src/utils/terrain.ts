@@ -220,7 +220,8 @@ export const getTerrainHeight = (
     worldX: number,
     worldY: number,
     terrainData: { width: number; height: number; data: Float32Array; minHeight: number, maxHeight: number },
-    exaggeration: number
+    exaggeration: number,
+    bounds?: typeof TERRAIN_CONFIG.BOUNDS
 ): number => {
     if (!terrainData) return 0;
     const { width, height, data, minHeight } = terrainData;
@@ -260,9 +261,8 @@ export const getTerrainHeight = (
 
     const elevation = z0 * (1 - ty) + z1 * ty;
 
-    // Convert to world Z
-    const dimensions = calculateBoundsDimensions(TERRAIN_CONFIG.BOUNDS);
-    const unitsPerMeter = 100 / dimensions.width;
-
-    return (elevation - minHeight) * unitsPerMeter * (exaggeration / 100);
+    // Return raw elevation in meters scaled by exaggeration
+    // Terrain geometry uses meters for Z directly (scaled only by exaggeration)
+    // We do NOT multiply by unitsPerMeter to match visual mesh
+    return (elevation - minHeight) * (exaggeration / 100);
 };

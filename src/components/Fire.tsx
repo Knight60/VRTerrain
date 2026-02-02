@@ -13,25 +13,11 @@ interface FireProps {
         minHeight: number;
         maxHeight: number;
     };
-    config?: {
-        enabled: boolean;
-        height: number;
-        heightOffset: number;
-        spread: number;
-        iterations: number;
-        octaves: number;
-    }
+    configs?: typeof TERRAIN_CONFIG.FIRES;
+    bounds?: typeof TERRAIN_CONFIG.BOUNDS; // Add bounds prop to handle Partial Terrain
 }
 
-
-
 // Fire Shader based on mattatz/THREE.Fire
-// Note: defines are set dynamically based on config
-const getFireShaderDefines = () => ({
-    "ITERATIONS": String(TERRAIN_CONFIG.FIRE.ITERATIONS || 10),
-    "OCTIVES": String(TERRAIN_CONFIG.FIRE.OCTAVES || 2)
-});
-
 const FireShader = {
     uniforms: {
         "fireTex": { value: null as THREE.Texture | null },
@@ -204,19 +190,21 @@ const FireMesh: React.FC<{
 
             materialRef.current.uniforms.time.value = state.clock.elapsedTime;
             materialRef.current.uniforms.invModelMatrix.value = invMatrix;
-            // Fire goes up in Z direction (after terrain rotation)
-            materialRef.current.uniforms.scale.value.set(scale, scale, scale * 2);
+            // Fire goes up in Y direction (Local Space)
+            materialRef.current.uniforms.scale.value.set(scale, scale * 2, scale);
         }
     });
 
     return (
-        // Rotate to stand upright: the terrain group is rotated [-PI/2, 0, 0]
-        // So fire needs to go "up" in the Z axis (which becomes Y in world space)
+        // Rotate to stand upright: Terrain Local Z is Up.
+        // Mesh Y is Shader Up.
+        // Rotate X 90 (PI/2) aligns Y with Z.
         <mesh
             ref={meshRef}
             position={position}
-            scale={[scale, scale, scale * 2]}
+            scale={[scale, scale * 2, scale]}
             rotation={[Math.PI / 2, 0, 0]}
+            renderOrder={10} // Ensure it draws after transparent terrain overlays
         >
             <boxGeometry args={[1, 1, 1]} />
             <shaderMaterial
@@ -228,25 +216,16 @@ const FireMesh: React.FC<{
                 transparent
                 depthWrite={false}
                 depthTest={true}
+                polygonOffset={true}
+                polygonOffsetFactor={-20} // Pull towards camera significantly to beat terrain micro-displacement
+                side={THREE.DoubleSide}
             />
         </mesh>
     );
 };
 
-export const Fire: React.FC<FireProps> = ({ exaggeration, terrainData, config }) => {
-    const { ENABLED, HEIGHT, HEIGHT_OFFSET, SPREAD, ITERATIONS, OCTAVES } = useMemo(() => {
-        const defaults = TERRAIN_CONFIG.FIRE;
-        return {
-            ENABLED: config?.enabled ?? defaults.ENABLED,
-            HEIGHT: config?.height ?? defaults.HEIGHT,
-            HEIGHT_OFFSET: config?.heightOffset ?? defaults.HEIGHT_OFFSET,
-            SPREAD: config?.spread ?? defaults.SPREAD,
-            ITERATIONS: config?.iterations ?? defaults.ITERATIONS,
-            OCTAVES: config?.octaves ?? defaults.OCTAVES,
-        };
-    }, [config]);
-
-    const { LOCATIONS } = TERRAIN_CONFIG.FIRE;
+export const Fire: React.FC<FireProps> = ({ exaggeration, terrainData, configs, bounds }) => {
+    const activeBounds = TERRAIN_CONFIG.BOUNDS; // ALWAYS use full bounds to match static geometry
 
     // Load fire texture
     const fireTex = useLoader(THREE.TextureLoader, '/fire/Fire.png');
@@ -260,35 +239,50 @@ export const Fire: React.FC<FireProps> = ({ exaggeration, terrainData, config })
         }
     }, [fireTex]);
 
-    // Create fire instances for each location
+    // Calculate baseScale to match Terrain's vertical scaling
+    const baseScale = useMemo(() => {
+        const dims = calculateBoundsDimensions(TERRAIN_CONFIG.BOUNDS);
+        return 100 / dims.width;
+    }, []);
+
+    // Create fire instances for each location in each config
     const fireInstances = useMemo(() => {
-        if (!ENABLED || !terrainData) return [];
+        if (!configs || !terrainData) return [];
 
-        return LOCATIONS.map((loc, idx) => {
-            const [worldX, worldY] = latLonToWorld(loc.lat, loc.lon, TERRAIN_CONFIG.BOUNDS);
-            const terrainZ = getTerrainHeight(worldX, worldY, terrainData, exaggeration);
+        const allInstances: { key: string, position: [number, number, number], scale: number, iterations: number, octaves: number }[] = [];
 
-            // Calculate units per meter for offset
-            const dimensions = calculateBoundsDimensions(TERRAIN_CONFIG.BOUNDS);
-            const unitsPerMeter = 100 / dimensions.width;
+        configs.forEach((config, configIdx) => {
+            if (!config.ENABLED) return;
 
-            // Apply offset (meters -> world units) * exaggeration
-            // Note: exaggeration is percentage (100 = 1x), so (exaggeration/100)
-            const offsetZ = (HEIGHT_OFFSET * unitsPerMeter) * (exaggeration / 100);
+            const { LOCATIONS, HEIGHT, HEIGHT_OFFSET, SPREAD, ITERATIONS, OCTAVES } = config;
 
-            // Fire scale for visual size
-            const fireScale = (loc.scale || 1.0) * HEIGHT * SPREAD;
+            LOCATIONS.forEach((loc, locIdx) => {
+                // Use ACTIVE bounds to calculate World Position
+                const [worldX, worldY] = latLonToWorld(loc.lat, loc.lon, activeBounds);
 
-            return {
-                key: `fire-${idx}`,
-                // Position fire directly on terrain surface + offset
-                position: [worldX, worldY, terrainZ + offsetZ] as [number, number, number],
-                scale: fireScale
-            };
+                if (Math.abs(worldX) > 60 || Math.abs(worldY) > 60) {
+                    return; // Outside view
+                }
+
+                const terrainZ = getTerrainHeight(worldX, worldY, terrainData, exaggeration, activeBounds);
+                const offsetZ = HEIGHT_OFFSET * (exaggeration / 100);
+                const fireScale = (loc.scale || 1.0) * HEIGHT * SPREAD;
+                const scaledZ = (terrainZ + offsetZ) * baseScale;
+
+                allInstances.push({
+                    key: `fire-${configIdx}-${locIdx}`,
+                    position: [worldX, worldY, scaledZ],
+                    scale: fireScale,
+                    iterations: ITERATIONS,
+                    octaves: OCTAVES
+                });
+            });
         });
-    }, [ENABLED, LOCATIONS, HEIGHT, HEIGHT_OFFSET, SPREAD, terrainData, exaggeration]);
 
-    if (!ENABLED || fireInstances.length === 0 || !fireTex) return null;
+        return allInstances;
+    }, [configs, terrainData, exaggeration, activeBounds, baseScale]);
+
+    if (fireInstances.length === 0 || !fireTex) return null;
 
     return (
         <group>
@@ -298,8 +292,8 @@ export const Fire: React.FC<FireProps> = ({ exaggeration, terrainData, config })
                     position={fire.position}
                     scale={fire.scale}
                     fireTex={fireTex}
-                    iterations={ITERATIONS}
-                    octaves={OCTAVES}
+                    iterations={fire.iterations}
+                    octaves={fire.octaves}
                 />
             ))}
         </group>

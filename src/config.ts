@@ -106,20 +106,22 @@ export const TERRAIN_CONFIG = {
     },
 
     // Fire Effect Settings
-    FIRE: {
-        ENABLED: true,
-        LOCATIONS: [
-            { lat: 16.868028, lon: 101.781342, scale: 1.0, intensity: 1.0 },
-        ],
-        COLOR_INNER: '#ffaa00',     // Inner flame color (yellow-orange)
-        COLOR_OUTER: '#ff3300',     // Outer flame color (red-orange)
-        HEIGHT: 2.0,                // Fire height in world units
-        HEIGHT_OFFSET: 20.0,        // Height offset in meters
-        SPREAD: 0.5,                // Fire spread radius
-        // Performance settings (lower = faster but less quality)
-        ITERATIONS: 6,              // Raymarching iterations (reduced for better performance)
-        OCTAVES: 1,                 // Noise octaves (reduced for better performance)
-    },
+    // Fire Effect Settings
+    FIRES: [
+        {
+            ENABLED: true,
+            LOCATIONS: [
+                { lat: 16.868028, lon: 101.781342, scale: 1.0, intensity: 1.0 },
+            ],
+            COLOR_INNER: '#ffaa00',     // Inner flame color (yellow-orange)
+            COLOR_OUTER: '#ff3300',     // Outer flame color (red-orange)
+            HEIGHT: 2.0,                // Fire height in world units
+            HEIGHT_OFFSET: 100.0,       // Height offset in meters
+            SPREAD: 0.5,                // Fire spread radius
+            ITERATIONS: 6,              // Raymarching iterations (reduced for better performance)
+            OCTAVES: 1,                 // Noise octaves (reduced for better performance)
+        }
+    ],
 
     // Visual Effects (Unreal Engine Style)
     EFFECTS: {

@@ -43,12 +43,12 @@ function App() {
         majorOpacity: TERRAIN_CONFIG.CONTOURS.MAJOR_LINE_OPACITY,
     });
     const [fireConfig, setFireConfig] = React.useState({
-        enabled: TERRAIN_CONFIG.FIRE.ENABLED,
-        height: TERRAIN_CONFIG.FIRE.HEIGHT,
-        heightOffset: TERRAIN_CONFIG.FIRE.HEIGHT_OFFSET,
-        spread: TERRAIN_CONFIG.FIRE.SPREAD,
-        iterations: TERRAIN_CONFIG.FIRE.ITERATIONS,
-        octaves: TERRAIN_CONFIG.FIRE.OCTAVES,
+        enabled: TERRAIN_CONFIG.FIRES[0].ENABLED,
+        height: TERRAIN_CONFIG.FIRES[0].HEIGHT,
+        heightOffset: TERRAIN_CONFIG.FIRES[0].HEIGHT_OFFSET,
+        spread: TERRAIN_CONFIG.FIRES[0].SPREAD,
+        iterations: TERRAIN_CONFIG.FIRES[0].ITERATIONS,
+        octaves: TERRAIN_CONFIG.FIRES[0].OCTAVES,
     });
 
     const controlsRef = React.useRef<any>(null);
@@ -744,7 +744,18 @@ function App() {
                         disableHover={isInteracting}
                         cloudConfig={cloudConfig}
                         contourConfig={contourConfig}
-                        fireConfig={fireConfig}
+                        fireConfigs={React.useMemo(() => {
+                            const firstFire = {
+                                ...TERRAIN_CONFIG.FIRES[0],
+                                ENABLED: fireConfig.enabled,
+                                HEIGHT: fireConfig.height,
+                                HEIGHT_OFFSET: fireConfig.heightOffset,
+                                SPREAD: fireConfig.spread,
+                                ITERATIONS: fireConfig.iterations,
+                                OCTAVES: fireConfig.octaves,
+                            };
+                            return [firstFire, ...TERRAIN_CONFIG.FIRES.slice(1)];
+                        }, [fireConfig])}
                     />
 
                     {/* Shadow Plane */}

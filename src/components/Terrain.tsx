@@ -35,12 +35,15 @@ interface ContourConfig {
 }
 
 interface FireConfig {
-    enabled: boolean;
-    height: number;
-    heightOffset: number;
-    spread: number;
-    iterations: number;
-    octaves: number;
+    ENABLED: boolean;
+    LOCATIONS: { lat: number; lon: number; scale: number; intensity: number }[];
+    COLOR_INNER?: string;
+    COLOR_OUTER?: string;
+    HEIGHT: number;
+    HEIGHT_OFFSET: number;
+    SPREAD: number;
+    ITERATIONS: number;
+    OCTAVES: number;
 }
 
 interface TerrainProps {
@@ -54,7 +57,7 @@ interface TerrainProps {
     enableMicroDisplacement?: boolean;
     cloudConfig?: CloudConfig;
     contourConfig?: ContourConfig;
-    fireConfig?: FireConfig;
+    fireConfigs?: FireConfig[];
 }
 
 // Helper to interpolate between pre-parsed colors
@@ -118,7 +121,7 @@ const createSedimentTexture = () => {
     return tex;
 };
 
-const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: number, max: number) => void }> = ({ shape, exaggeration = 100, paletteColors, onHeightRangeChange, showSoilProfile = true, baseMapName = null, onHover, disableHover = false, enableMicroDisplacement = true, cloudConfig, contourConfig, fireConfig }) => {
+const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: number, max: number) => void }> = ({ shape, exaggeration = 100, paletteColors, onHeightRangeChange, showSoilProfile = true, baseMapName = null, onHover, disableHover = false, enableMicroDisplacement = true, cloudConfig, contourConfig, fireConfigs }) => {
     const [terrainData, setTerrainData] = useState<{ width: number; height: number; data: Float32Array; minHeight: number; maxHeight: number } | null>(null);
     const [previousTerrainData, setPreviousTerrainData] = useState<typeof terrainData>(null);
     const [isLoadingTerrain, setIsLoadingTerrain] = useState(false);
@@ -1274,7 +1277,7 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
                 </>
             )}
             {terrainData && <Contours terrainData={terrainData} exaggeration={exaggeration} shape={shape} config={contourConfig} />}
-            {terrainData && <Fire exaggeration={exaggeration} terrainData={terrainData} config={fireConfig} />}
+            {terrainData && <Fire exaggeration={exaggeration} terrainData={terrainData} configs={fireConfigs} bounds={activeTextureBounds} />}
             <Clouds exaggeration={exaggeration} cloudConfig={cloudConfig} />
         </group>
     );
