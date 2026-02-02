@@ -267,7 +267,7 @@ export const Fire: React.FC<FireProps> = ({ exaggeration, terrainData, configs, 
     const activeBounds = TERRAIN_CONFIG.BOUNDS; // ALWAYS use full bounds to match static geometry
 
     // Load fire texture
-    const fireTex = useLoader(THREE.TextureLoader, '/fire/Fire.png');
+    const fireTex = useLoader(THREE.TextureLoader, TERRAIN_CONFIG.FIRE_TEXTURE_URL);
 
     useEffect(() => {
         if (fireTex) {

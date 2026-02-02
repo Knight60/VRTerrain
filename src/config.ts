@@ -55,7 +55,7 @@ export const TERRAIN_CONFIG = {
     SHADOW_DISTANCE_UNIT: 'percent', // 'meters' or 'percent' of shortest bounds width
 
     // Background Image
-    BACKGROUND_IMAGE: '/background/studio_background.png', // Set to null or empty string to disable
+    BACKGROUND_IMAGE: './background/studio_background.png', // Set to null or empty string to disable
     USE_BACKGROUND_IMAGE: true, // Toggle between background image and white background
 
     // Color Palettes
@@ -80,6 +80,7 @@ export const TERRAIN_CONFIG = {
     // Cloud Settings
     CLOUDS: {
         ENABLED: false,
+        CLOUD_TEXTURE_URL: './cloud/cloud.png',
         GLOBAL_HEIGHT_OFFSET: 0, // Add/subtract km to all clouds
         GLOBAL_HEIGHT_SCALAR: 0.1, // Scale all cloud heights
         LAYERS: [
@@ -122,7 +123,7 @@ export const TERRAIN_CONFIG = {
     },
 
     // Fire Effect Settings
-    // Fire Effect Settings
+    FIRE_TEXTURE_URL: './fire/Fire.png',
     FIRES: [
         {
             ENABLED: true,

@@ -184,7 +184,7 @@ export const Clouds: React.FC<CloudsProps> = ({ exaggeration, cloudConfig, windC
     const WIND_LAYERS: WindLayerConfig[] = windConfig?.layers ?? TERRAIN_CONFIG.WIND.LAYERS;
 
     // Load cloud texture
-    const texture = useLoader(THREE.TextureLoader, '/cloud/cloud.png');
+    const texture = useLoader(THREE.TextureLoader, TERRAIN_CONFIG.CLOUDS.CLOUD_TEXTURE_URL);
 
     // Generate Static Cloud Definitions with CLUSTERING
     const staticCloudDefs = useMemo(() => {
