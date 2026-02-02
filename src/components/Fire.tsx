@@ -4,6 +4,41 @@ import * as THREE from 'three';
 import { TERRAIN_CONFIG } from '../config';
 import { latLonToWorld, getTerrainHeight, calculateBoundsDimensions } from '../utils/terrain';
 
+import { SmokePlume } from './SmokePlume';
+
+// Define matched interfaces for Props
+interface WindLayerConfig {
+    speed: number;
+    direction: number;
+}
+
+interface WindConfig {
+    enabled: boolean;
+    layers: WindLayerConfig[];
+}
+
+interface FireConfigType {
+    ENABLED: boolean;
+    LOCATIONS: { lat: number; lon: number; scale: number; intensity: number }[];
+    COLOR_INNER?: string;
+    COLOR_OUTER?: string;
+    HEIGHT: number;
+    HEIGHT_OFFSET: number;
+    SPREAD: number;
+    ITERATIONS: number;
+    OCTAVES: number;
+    SMOKE?: {
+        ENABLED: boolean;
+        HEIGHT: number;
+        SPEED: number;
+        DISPERSION: number;
+        SIZE: number;
+        OPACITY: number;
+        COLOR: string;
+        MAX_HEIGHT?: number;
+    };
+}
+
 interface FireProps {
     exaggeration: number;
     terrainData?: {
@@ -13,8 +48,9 @@ interface FireProps {
         minHeight: number;
         maxHeight: number;
     };
-    configs?: typeof TERRAIN_CONFIG.FIRES;
-    bounds?: typeof TERRAIN_CONFIG.BOUNDS; // Add bounds prop to handle Partial Terrain
+    configs?: FireConfigType[];
+    bounds?: typeof TERRAIN_CONFIG.BOUNDS;
+    windConfig?: WindConfig;
 }
 
 // Fire Shader based on mattatz/THREE.Fire
@@ -224,7 +260,7 @@ const FireMesh: React.FC<{
     );
 };
 
-export const Fire: React.FC<FireProps> = ({ exaggeration, terrainData, configs, bounds }) => {
+export const Fire: React.FC<FireProps> = ({ exaggeration, terrainData, configs, bounds, windConfig }) => {
     const activeBounds = TERRAIN_CONFIG.BOUNDS; // ALWAYS use full bounds to match static geometry
 
     // Load fire texture
@@ -249,12 +285,19 @@ export const Fire: React.FC<FireProps> = ({ exaggeration, terrainData, configs, 
     const fireInstances = useMemo(() => {
         if (!configs || !terrainData) return [];
 
-        const allInstances: { key: string, position: [number, number, number], scale: number, iterations: number, octaves: number }[] = [];
+        const allInstances: {
+            key: string,
+            position: [number, number, number],
+            scale: number,
+            iterations: number,
+            octaves: number,
+            smokeConfig?: any
+        }[] = [];
 
         configs.forEach((config, configIdx) => {
             if (!config.ENABLED) return;
 
-            const { LOCATIONS, HEIGHT, HEIGHT_OFFSET, SPREAD, ITERATIONS, OCTAVES } = config;
+            const { LOCATIONS, HEIGHT, HEIGHT_OFFSET, SPREAD, ITERATIONS, OCTAVES, SMOKE } = config;
 
             LOCATIONS.forEach((loc, locIdx) => {
                 // Use ACTIVE bounds to calculate World Position
@@ -274,7 +317,8 @@ export const Fire: React.FC<FireProps> = ({ exaggeration, terrainData, configs, 
                     position: [worldX, worldY, scaledZ],
                     scale: fireScale,
                     iterations: ITERATIONS,
-                    octaves: OCTAVES
+                    octaves: OCTAVES,
+                    smokeConfig: SMOKE
                 });
             });
         });
@@ -284,17 +328,30 @@ export const Fire: React.FC<FireProps> = ({ exaggeration, terrainData, configs, 
 
     if (fireInstances.length === 0 || !fireTex) return null;
 
+    // Get Wind Layer 0 for smoke (simplification)
+    const activeWind = windConfig?.enabled && windConfig.layers.length > 0 ? windConfig.layers[0] : undefined;
+
     return (
         <group>
             {fireInstances.map((fire) => (
-                <FireMesh
-                    key={fire.key}
-                    position={fire.position}
-                    scale={fire.scale}
-                    fireTex={fireTex}
-                    iterations={fire.iterations}
-                    octaves={fire.octaves}
-                />
+                <group key={fire.key}>
+                    <FireMesh
+                        position={fire.position}
+                        scale={fire.scale}
+                        fireTex={fireTex}
+                        iterations={fire.iterations}
+                        octaves={fire.octaves}
+                    />
+                    {fire.smokeConfig && fire.smokeConfig.ENABLED && (
+                        <SmokePlume
+                            position={fire.position} // Smoke originates at fire base
+                            config={fire.smokeConfig}
+                            windLayer={activeWind}
+                            scale={baseScale}
+                            maxHeightOffset={fire.smokeConfig.MAX_HEIGHT || 100}
+                        />
+                    )}
+                </group>
             ))}
         </group>
     );

@@ -130,6 +130,20 @@ export const TERRAIN_CONFIG = {
             SPREAD: 0.5,                // Fire spread radius
             ITERATIONS: 6,              // Raymarching iterations (reduced for better performance)
             OCTAVES: 1,                 // Noise octaves (reduced for better performance)
+            SMOKE: {
+                ENABLED: true,
+                MAX_HEIGHT: 50.0,       // Smoke fade-out height relative to fire (world units?) or meters?
+                // Let's use World Units for consistency or assume meters if usually converted.
+                // Fire HEIGHT is "World Units". 
+                // Let's use Meters for user friendliness if possible, but Fire uses WorldUnits.
+                // "HEIGHT_OFFSET" is in meters.
+                HEIGHT: 300.0,          // Meters.
+                SPEED: 2.0,            // Vertical Rise Speed
+                DISPERSION: 0.2,        // Horizontal spread factor per unit height
+                SIZE: 5.0,              // Particle size
+                OPACITY: 0.3,           // Base opacity
+                COLOR: '#333333'        // Smoke color
+            }
         }
     ],
 

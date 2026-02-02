@@ -46,13 +46,23 @@ interface ContourConfig {
 interface FireConfig {
     ENABLED: boolean;
     LOCATIONS: { lat: number; lon: number; scale: number; intensity: number }[];
-    COLOR_INNER?: string;
-    COLOR_OUTER?: string;
+    COLOR_INNER: string;
+    COLOR_OUTER: string;
     HEIGHT: number;
     HEIGHT_OFFSET: number;
     SPREAD: number;
     ITERATIONS: number;
     OCTAVES: number;
+    SMOKE?: {
+        ENABLED: boolean;
+        HEIGHT: number;
+        SPEED: number;
+        DISPERSION: number;
+        SIZE: number;
+        OPACITY: number;
+        COLOR: string;
+        MAX_HEIGHT?: number;
+    };
 }
 
 interface TerrainProps {
@@ -1290,7 +1300,7 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
                 </>
             )}
             {terrainData && <Contours terrainData={terrainData} exaggeration={exaggeration} shape={shape} config={contourConfig} />}
-            {terrainData && <Fire exaggeration={exaggeration} terrainData={terrainData} configs={fireConfigs} bounds={activeTextureBounds} />}
+            {terrainData && <Fire exaggeration={exaggeration} terrainData={terrainData} configs={fireConfigs} bounds={activeTextureBounds} windConfig={windConfig} />}
             <Clouds exaggeration={exaggeration} cloudConfig={cloudConfig} windConfig={windConfig} />
         </group>
     );

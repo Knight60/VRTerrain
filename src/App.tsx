@@ -90,6 +90,17 @@ function App() {
         iterations: TERRAIN_CONFIG.FIRES[0].ITERATIONS,
         octaves: TERRAIN_CONFIG.FIRES[0].OCTAVES,
     });
+    const [showSmokeDialog, setShowSmokeDialog] = React.useState(false);
+    const [smokeConfig, setSmokeConfig] = React.useState({
+        ENABLED: TERRAIN_CONFIG.FIRES[0].SMOKE.ENABLED,
+        HEIGHT: TERRAIN_CONFIG.FIRES[0].SMOKE.HEIGHT,
+        SPEED: TERRAIN_CONFIG.FIRES[0].SMOKE.SPEED,
+        DISPERSION: TERRAIN_CONFIG.FIRES[0].SMOKE.DISPERSION,
+        SIZE: TERRAIN_CONFIG.FIRES[0].SMOKE.SIZE,
+        OPACITY: TERRAIN_CONFIG.FIRES[0].SMOKE.OPACITY,
+        COLOR: TERRAIN_CONFIG.FIRES[0].SMOKE.COLOR,
+        MAX_HEIGHT: TERRAIN_CONFIG.FIRES[0].SMOKE.MAX_HEIGHT
+    });
 
     const controlsRef = React.useRef<any>(null);
 
@@ -272,6 +283,15 @@ function App() {
                                 <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer hover:text-white transition-colors">
                                     <input
                                         type="checkbox"
+                                        checked={autoRotate}
+                                        onChange={() => setAutoRotate(!autoRotate)}
+                                        className="accent-emerald-500"
+                                    />
+                                    Auto Rotate
+                                </label>
+                                <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer hover:text-white transition-colors">
+                                    <input
+                                        type="checkbox"
                                         checked={showSoilProfile}
                                         onChange={() => setShowSoilProfile(!showSoilProfile)}
                                         className="accent-emerald-500"
@@ -296,15 +316,7 @@ function App() {
                                     />
                                     Micro-Displacement (Roughness)
                                 </label>
-                                <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer hover:text-white transition-colors">
-                                    <input
-                                        type="checkbox"
-                                        checked={autoRotate}
-                                        onChange={() => setAutoRotate(!autoRotate)}
-                                        className="accent-emerald-500"
-                                    />
-                                    Auto Rotate
-                                </label>
+
                                 <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer hover:text-white transition-colors">
                                     <input
                                         type="checkbox"
@@ -315,16 +327,22 @@ function App() {
                                     Studio Background
                                 </label>
                                 <button
+                                    onClick={() => setShowContourDialog(true)}
+                                    className="mt-2 w-full px-3 py-2 rounded-md text-xs font-medium transition-colors border bg-amber-500/20 border-amber-500 text-amber-300 hover:bg-amber-500/30"
+                                >
+                                    📊 Contour Configuration
+                                </button>
+                                <button
                                     onClick={() => setShowCloudDialog(true)}
                                     className="mt-2 w-full px-3 py-2 rounded-md text-xs font-medium transition-colors border bg-cyan-500/20 border-cyan-500 text-cyan-300 hover:bg-cyan-500/30"
                                 >
                                     ☁️ Cloud Configuration
                                 </button>
                                 <button
-                                    onClick={() => setShowContourDialog(true)}
-                                    className="mt-2 w-full px-3 py-2 rounded-md text-xs font-medium transition-colors border bg-amber-500/20 border-amber-500 text-amber-300 hover:bg-amber-500/30"
+                                    onClick={() => setShowSmokeDialog(true)}
+                                    className="mt-2 w-full px-3 py-2 rounded-md text-xs font-medium transition-colors border bg-gray-500/20 border-white-500 text-gray-300 hover:bg-gray-500/30"
                                 >
-                                    📊 Contour Configuration
+                                    💨 Smoke Configuration
                                 </button>
                                 <button
                                     onClick={() => setShowFireDialog(true)}
@@ -745,6 +763,113 @@ function App() {
                 )
             }
 
+            {/* Smoke Configuration Dialog */}
+            {
+                showSmokeDialog && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                        <div className="bg-gray-900/95 border border-white/20 rounded-xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto shadow-2xl">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-xl font-bold text-gray-400">💨 Smoke Configuration</h2>
+                                <button
+                                    onClick={() => setShowSmokeDialog(false)}
+                                    className="text-gray-400 hover:text-white text-2xl leading-none"
+                                >
+                                    ×
+                                </button>
+                            </div>
+
+                            <div className="space-y-4">
+                                <label className="flex items-center gap-2 text-sm text-gray-300">
+                                    <input
+                                        type="checkbox"
+                                        checked={smokeConfig.ENABLED}
+                                        onChange={(e) => setSmokeConfig(prev => ({ ...prev, ENABLED: e.target.checked }))}
+                                        className="accent-gray-500"
+                                    />
+                                    Enable Smoke Plumes
+                                </label>
+
+                                <div>
+                                    <label className="text-xs text-gray-400">Max Height (m) (Fade Out)</label>
+                                    <input
+                                        type="number"
+                                        step="10"
+                                        value={smokeConfig.MAX_HEIGHT}
+                                        onChange={(e) => setSmokeConfig(prev => ({ ...prev, MAX_HEIGHT: parseFloat(e.target.value) || 50 }))}
+                                        className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="text-xs text-gray-400">Rise Speed</label>
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        value={smokeConfig.SPEED}
+                                        onChange={(e) => setSmokeConfig(prev => ({ ...prev, SPEED: parseFloat(e.target.value) || 2 }))}
+                                        className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="text-xs text-gray-400">Dispersion (Spread)</label>
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        value={smokeConfig.DISPERSION}
+                                        onChange={(e) => setSmokeConfig(prev => ({ ...prev, DISPERSION: parseFloat(e.target.value) || 0.2 }))}
+                                        className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="text-xs text-gray-400">Particle Size</label>
+                                    <input
+                                        type="number"
+                                        step="1"
+                                        value={smokeConfig.SIZE}
+                                        onChange={(e) => setSmokeConfig(prev => ({ ...prev, SIZE: parseFloat(e.target.value) || 5 }))}
+                                        className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="text-xs text-gray-400">Opacity: {smokeConfig.OPACITY.toFixed(2)}</label>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="1"
+                                        step="0.05"
+                                        value={smokeConfig.OPACITY}
+                                        onChange={(e) => setSmokeConfig(prev => ({ ...prev, OPACITY: parseFloat(e.target.value) }))}
+                                        className="w-full mt-1 accent-gray-500"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="text-xs text-gray-400">Color</label>
+                                    <input
+                                        type="color"
+                                        value={smokeConfig.COLOR}
+                                        onChange={(e) => setSmokeConfig(prev => ({ ...prev, COLOR: e.target.value }))}
+                                        className="w-full mt-1 h-8 bg-black/30 border border-white/20 rounded cursor-pointer"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end gap-3 mt-4">
+                                <button
+                                    onClick={() => setShowSmokeDialog(false)}
+                                    className="px-4 py-2 rounded-md text-sm font-medium bg-gray-700 text-gray-300 hover:bg-gray-600"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
             <Canvas
                 shadows
                 camera={{
@@ -821,9 +946,10 @@ function App() {
                                 SPREAD: fireConfig.spread,
                                 ITERATIONS: fireConfig.iterations,
                                 OCTAVES: fireConfig.octaves,
+                                SMOKE: smokeConfig
                             };
                             return [firstFire, ...TERRAIN_CONFIG.FIRES.slice(1)];
-                        }, [fireConfig])}
+                        }, [fireConfig, smokeConfig])}
                     />
 
                     {/* Shadow Plane */}
