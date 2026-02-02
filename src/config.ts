@@ -132,13 +132,13 @@ export const TERRAIN_CONFIG = {
             OCTAVES: 1,                 // Noise octaves (reduced for better performance)
             SMOKE: {
                 ENABLED: true,
-                MAX_HEIGHT: 80.0,       // Smoke rise height in meters
+                MAX_HEIGHT: 100,       // Smoke rise height in meters
                 HEIGHT: 300.0,          // Meters (not currently used)
                 SPEED: 5.0,             // Vertical rise speed (meters/sec)
-                DISPERSION: 0.15,       // Horizontal spread factor
-                SIZE: 20.0,             // Particle base size (larger = bigger smoke puffs)
+                DISPERSION: 1.0,       // Horizontal spread factor
+                SIZE: 20,             // Particle base size (larger = bigger smoke puffs)
                 OPACITY: 0.4,           // Base opacity (0-1)
-                COLOR: '#444444'        // Smoke color (darker = more visible)
+                COLOR: '#000000'        // Smoke color (darker = more visible)
             }
         }
     ],

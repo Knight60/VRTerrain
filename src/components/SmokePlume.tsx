@@ -173,18 +173,27 @@ export const SmokePlume: React.FC<SmokePlumeProps> = ({ position, config, windLa
             // Reset if too old or too high (Y-UP in local space)
             if (p.age > p.life || p.y > maxRise) {
                 p.age = 0;
-                p.life = 4 + Math.random() * 4; // Longer life for smoke to travel
+
+                // Calculate life based on speed and height to ensure it reaches top
+                const nominalSpeed = cfg.SPEED;
+                const timeToReachTop = maxRise / nominalSpeed;
+                p.life = timeToReachTop * (1.0 + Math.random() * 0.2); // Add buffer
+
                 // Start very tight at the source
-                const startSpread = 0.3; // Very small spread at fire base
+                const startSpread = 0.5; // Small initial area
                 p.x = (Math.random() - 0.5) * startSpread;
-                p.y = 0.5; // Start 0.5 meter above base
+                p.y = 0.5; // Start slightly above base
                 p.z = (Math.random() - 0.5) * startSpread;
 
-                // Initial Velocity: Mostly upward, minimal spread
-                p.vx = (Math.random() - 0.5) * cfg.DISPERSION * 0.05;
-                p.vz = (Math.random() - 0.5) * cfg.DISPERSION * 0.05;
-                // Strong upward speed (Y is up in local space)
-                p.vy = cfg.SPEED * (1.5 + Math.random() * 1.0);
+                // Initial Velocity:
+                // vy (Vertical) = SPEED
+                // vx, vz (Horizontal) = Controlled by DISPERSION
+                p.vy = nominalSpeed * (0.9 + Math.random() * 0.2); // Variation in rise speed
+
+                // Use DISPERSION directly for initial random spread velocity
+                p.vx = (Math.random() - 0.5) * cfg.DISPERSION;
+                p.vz = (Math.random() - 0.5) * cfg.DISPERSION;
+
                 p.size = 0.8 + Math.random() * 0.6;
             } else {
                 // Wind effect increases strongly with height (Y is up)
@@ -202,12 +211,15 @@ export const SmokePlume: React.FC<SmokePlumeProps> = ({ position, config, windLa
                 };
 
                 // Update position: Rise straight, then drift with wind
-                p.x += (p.vx * spreadFactor + windDx * windSpeed * windFactor * 3.0 + turbulence.x) * delta;
-                p.y += (p.vy + turbulence.y) * delta; // Y is vertical
-                p.z += (p.vz * spreadFactor + windDy * windSpeed * windFactor * 3.0 + turbulence.z) * delta;
+                // Use Dispersion in wind drift too
+                const dispersal = 1.0 + heightRatio * 2.0;
 
-                // Very gradual slowdown as smoke rises
-                p.vy *= 0.998;
+                p.x += (p.vx + windDx * windSpeed * windFactor * 3.0 + turbulence.x) * delta;
+                p.y += (p.vy + turbulence.y) * delta;
+                p.z += (p.vz + windDy * windSpeed * windFactor * 3.0 + turbulence.z) * delta;
+
+                // No slowdown, we want to reach max height
+                // p.vy *= 0.998;
             }
 
             // Update buffer (after rotation [PI/2,0,0]: local Y becomes world Z)
@@ -277,6 +289,7 @@ export const SmokePlume: React.FC<SmokePlumeProps> = ({ position, config, windLa
             const cfg = configRef.current;
             if (mat && mat.uniforms) {
                 if (mat.uniforms.color) mat.uniforms.color.value.set(cfg.COLOR);
+                if (mat.uniforms.colorOuter) mat.uniforms.colorOuter.value.set(cfg.COLOR).offsetHSL(0, 0, 0.3); // Automatically lighter
                 if (mat.uniforms.globalOpacity) mat.uniforms.globalOpacity.value = cfg.OPACITY;
                 // Scale is World Units Size
                 if (mat.uniforms.scale) mat.uniforms.scale.value = cfg.SIZE * scale;
@@ -300,9 +313,10 @@ export const SmokePlume: React.FC<SmokePlumeProps> = ({ position, config, windLa
         uniforms: {
             tex: { value: texture },
             color: { value: new THREE.Color(config.COLOR) },
+            colorOuter: { value: new THREE.Color(config.COLOR).offsetHSL(0, -0.2, 0.2) }, // Darker/Lighter variation
             globalOpacity: { value: config.OPACITY },
-            scale: { value: config.SIZE * scale }, // Scale particle size by world scale
-            maxHeight: { value: maxHeightOffset } // Height in meters
+            scale: { value: config.SIZE * scale },
+            maxHeight: { value: maxHeightOffset }
         },
         // ... (rest of shader def, keeping vertexShader string inline in return if preferred, OR defined here)
     }), [texture, config, scale, maxHeightOffset]);
@@ -352,6 +366,7 @@ export const SmokePlume: React.FC<SmokePlumeProps> = ({ position, config, windLa
                 uniforms={smokeShader.uniforms}
                 vertexShader={`
                     varying float vAlpha;
+                    varying float vDist; // Distance from center axis
                     uniform float scale;
                     uniform float maxHeight;
                     
@@ -361,37 +376,46 @@ export const SmokePlume: React.FC<SmokePlumeProps> = ({ position, config, windLa
                         
                         // Size: Start large, expand massively with height (Y is up in local space)
                         float heightRatio = position.y / maxHeight;
-                        float growth = 2.0 + heightRatio * 15.0; // Start bigger, grow much larger
+                        float growth = 2.0 + heightRatio * 15.0; 
                         
+                        // Pass normalized distance from center axis (X, Z) to fragment
+                        // Normalize by expected growth width approx
+                        float widthAtHeight = 10.0 * growth; 
+                        float dist = length(position.xz);
+                        vDist = smoothstep(0.0, widthAtHeight * 4.0, dist); // 0 at center, 1 at wide edge
+
                         // Much larger base size for visible smoke puffs
                         gl_PointSize = max(30.0, scale * growth * (12000.0 / -mvPosition.z)); 
                         
                         // Natural fade: fade in quickly, fade out gradually at top (Y is up)
                         float h = max(0.0, position.y);
                         // Gradual fade out at the top
-                        vAlpha = 1.0 - smoothstep(maxHeight * 0.4, maxHeight, h);
+                        vAlpha = 1.0 - smoothstep(maxHeight * 0.7, maxHeight, h);
                         // Very quick fade in at bottom
-                        vAlpha *= smoothstep(0.0, maxHeight * 0.01, h);
-                        // Additional opacity variation for natural look
-                        vAlpha *= 0.7 + 0.3 * (1.0 - heightRatio);
+                        vAlpha *= smoothstep(0.0, maxHeight * 0.05, h);
                     }
                 `}
                 fragmentShader={`
                     uniform vec3 color;
+                    uniform vec3 colorOuter;
                     uniform sampler2D tex;
                     uniform float globalOpacity;
                     varying float vAlpha;
+                    varying float vDist;
                     
                     void main() {
                         vec4 texColor = texture2D(tex, gl_PointCoord);
                         // Discard very transparent pixels for better blending
                         if (texColor.a < 0.05) discard;
                         
-                        // Softer edges for natural smoke appearance
+                        // Gradient Color: Mix Inner (color) and Outer (colorOuter) based on vDist
+                        vec3 finalColor = mix(color, colorOuter, min(1.0, vDist * 1.5));
+
+                        // Softer edges
                         float alpha = texColor.a * globalOpacity * vAlpha;
-                        alpha *= 0.9; // Slightly more opaque for visibility
+                        alpha *= 0.9; 
                         
-                        gl_FragColor = vec4(color, alpha);
+                        gl_FragColor = vec4(finalColor, alpha);
                     }
                 `}
             />
