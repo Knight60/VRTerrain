@@ -5,13 +5,13 @@ import { useFrame } from '@react-three/fiber';
 
 interface SmokeConfig {
     ENABLED: boolean;
-    HEIGHT: number;
+    HEIGHT_MIN: number;
     SPEED: number;
     DISPERSION: number;
     SIZE: number;
     OPACITY: number;
     COLOR: string;
-    MAX_HEIGHT?: number;
+    HEIGHT_MAX?: number;
 }
 
 interface SmokePlumeProps {
@@ -128,19 +128,25 @@ export const SmokePlume: React.FC<SmokePlumeProps> = ({ position, config, windLa
 
     // Particle State (CPU side)
     const particleData = useMemo(() => {
+        // Calculate expected life based on config to spread emission
+        const h = config.HEIGHT_MAX || config.HEIGHT_MIN || 100;
+        const s = config.SPEED || 2;
+        const expectedLife = h / s;
+
         return Array.from({ length: particleCount }).map((_, i) => ({
-            age: (i / particleCount) * 6, // Stagger initial ages for continuous flow
-            life: 4 + Math.random() * 4, // Longer life for smoke to travel
+            // Spread age from -expectedLife to 0 to ensure continuous stream from t=0
+            age: -Math.random() * expectedLife,
+            life: expectedLife * (1.0 + Math.random() * 0.2), // Assign roughly expected life
             x: 0,
             y: 0, // Y is UP after rotation [Math.PI/2, 0, 0]
             z: 0,
             vx: (Math.random() - 0.5) * 0.05, // Minimal horizontal velocity at start
-            vy: 2.0 + Math.random() * 1.0, // Strong upward velocity
+            vy: s + Math.random() * (s * 0.5), // Strong upward velocity around nominal SPEED
             vz: (Math.random() - 0.5) * 0.05, // Minimal horizontal velocity at start
             offset: Math.random() * Math.PI * 2,
             size: 0.8 + Math.random() * 0.6, // Individual particle size variation
         }));
-    }, [particleCount]);
+    }, [particleCount, config.HEIGHT_MAX, config.HEIGHT_MIN, config.SPEED]); // Re-init if dynamics change significantly
 
     useFrame((state, delta) => {
         if (!pointsRef.current) return;
@@ -161,14 +167,24 @@ export const SmokePlume: React.FC<SmokePlumeProps> = ({ position, config, windLa
         const array = posAttr.array as Float32Array;
 
         // Rise Limit
-        // Prefer MAX_HEIGHT from UI config, fallback to HEIGHT or default
+        // Prefer MAX_HEIGHT from UI config, fallback to HEIGHT_MIN or default
         // maxHeightOffset is already in meters, no need to multiply by scale for height check
-        const maxRise = (cfg.MAX_HEIGHT || cfg.HEIGHT || 100);
+        const maxRise = (cfg.HEIGHT_MAX || cfg.HEIGHT_MIN || 100);
 
         for (let i = 0; i < particleCount; i++) {
             const p = particleData[i];
 
             p.age += delta;
+
+            // PRE-WARM / DELAY LOGIC:
+            // If age is negative, it means this particle hasn't been emitted yet OR is waiting for its turn.
+            if (p.age < 0) {
+                // Keep hidden at source
+                array[i * 3] = 0;
+                array[i * 3 + 1] = 0; // y=0 -> vAlpha=0 -> Invisible
+                array[i * 3 + 2] = 0;
+                continue;
+            }
 
             // Reset if too old or too high (Y-UP in local space)
             if (p.age > p.life || p.y > maxRise) {
@@ -294,7 +310,7 @@ export const SmokePlume: React.FC<SmokePlumeProps> = ({ position, config, windLa
                 // Scale is World Units Size
                 if (mat.uniforms.scale) mat.uniforms.scale.value = cfg.SIZE * scale;
                 // MaxHeight is in meters
-                const h = (cfg.MAX_HEIGHT || cfg.HEIGHT || 100);
+                const h = (cfg.HEIGHT_MAX || cfg.HEIGHT_MIN || 100);
                 if (mat.uniforms.maxHeight) mat.uniforms.maxHeight.value = h;
             }
         }

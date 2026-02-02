@@ -55,13 +55,13 @@ interface FireConfig {
     OCTAVES: number;
     SMOKE?: {
         ENABLED: boolean;
-        HEIGHT: number;
+        HEIGHT_MIN: number;
         SPEED: number;
         DISPERSION: number;
         SIZE: number;
         OPACITY: number;
         COLOR: string;
-        MAX_HEIGHT?: number;
+        HEIGHT_MAX?: number;
     };
 }
 

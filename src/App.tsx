@@ -142,13 +142,13 @@ function App() {
     const [showSmokeDialog, setShowSmokeDialog] = React.useState(false);
     const [smokeConfig, setSmokeConfig] = React.useState({
         ENABLED: TERRAIN_CONFIG.FIRES[0].SMOKE.ENABLED,
-        HEIGHT: TERRAIN_CONFIG.FIRES[0].SMOKE.HEIGHT,
+        HEIGHT_MIN: TERRAIN_CONFIG.FIRES[0].SMOKE.HEIGHT_MIN,
         SPEED: TERRAIN_CONFIG.FIRES[0].SMOKE.SPEED,
         DISPERSION: TERRAIN_CONFIG.FIRES[0].SMOKE.DISPERSION,
         SIZE: TERRAIN_CONFIG.FIRES[0].SMOKE.SIZE,
         OPACITY: TERRAIN_CONFIG.FIRES[0].SMOKE.OPACITY,
         COLOR: TERRAIN_CONFIG.FIRES[0].SMOKE.COLOR,
-        MAX_HEIGHT: TERRAIN_CONFIG.FIRES[0].SMOKE.MAX_HEIGHT
+        HEIGHT_MAX: TERRAIN_CONFIG.FIRES[0].SMOKE.HEIGHT_MAX
     });
 
     const controlsRef = React.useRef<any>(null);
@@ -850,8 +850,8 @@ function App() {
                                     <input
                                         type="number"
                                         step="10"
-                                        value={smokeConfig.MAX_HEIGHT}
-                                        onChange={(e) => setSmokeConfig(prev => ({ ...prev, MAX_HEIGHT: parseFloat(e.target.value) || 50 }))}
+                                        value={smokeConfig.HEIGHT_MAX}
+                                        onChange={(e) => setSmokeConfig(prev => ({ ...prev, HEIGHT_MAX: parseFloat(e.target.value) || 50 }))}
                                         className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
                                     />
                                 </div>

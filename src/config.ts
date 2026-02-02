@@ -20,7 +20,7 @@ export const TERRAIN_CONFIG = {
 
     // Camera & Navigation
     CAMERA: {
-        MOVE_SPEED: 1.0,        // Speed of smoothing to target on double-click (Higher = Faster)
+        MOVE_SPEED: 0.5,        // Speed of smoothing to target on double-click (Higher = Faster)
     },
 
     // elevation = (r * 256 + g + b / 256) - 32768
@@ -138,11 +138,11 @@ export const TERRAIN_CONFIG = {
             OCTAVES: 1,                 // Noise octaves (reduced for better performance)
             SMOKE: {
                 ENABLED: true,
-                MAX_HEIGHT: 100,       // Smoke rise height in meters
-                HEIGHT: 300.0,          // Meters (not currently used)
+                HEIGHT_MAX: 100.0,       // Smoke rise height in meters
+                HEIGHT_MIN: 10.0,          // Meters (not currently used)
                 SPEED: 2.0,             // Vertical rise speed (meters/sec)
                 DISPERSION: 1.0,       // Horizontal spread factor
-                SIZE: 20,             // Particle base size (larger = bigger smoke puffs)
+                SIZE: 30,             // Particle base size (larger = bigger smoke puffs)
                 OPACITY: 0.4,           // Base opacity (0-1)
                 COLOR: '#000000'        // Smoke color (darker = more visible)
             }

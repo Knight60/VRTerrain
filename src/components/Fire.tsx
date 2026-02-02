@@ -29,13 +29,13 @@ interface FireConfigType {
     OCTAVES: number;
     SMOKE?: {
         ENABLED: boolean;
-        HEIGHT: number;
+        HEIGHT_MIN: number;
         SPEED: number;
         DISPERSION: number;
         SIZE: number;
         OPACITY: number;
         COLOR: string;
-        MAX_HEIGHT?: number;
+        HEIGHT_MAX?: number;
     };
 }
 
@@ -291,7 +291,9 @@ export const Fire: React.FC<FireProps> = ({ exaggeration, terrainData, configs, 
             scale: number,
             iterations: number,
             octaves: number,
-            smokeConfig?: any
+            smokeConfig?: any,
+            lat: number,
+            lon: number
         }[] = [];
 
         configs.forEach((config, configIdx) => {
@@ -361,7 +363,7 @@ export const Fire: React.FC<FireProps> = ({ exaggeration, terrainData, configs, 
                             config={fire.smokeConfig}
                             windLayer={activeWind}
                             scale={baseScale}
-                            maxHeightOffset={fire.smokeConfig.MAX_HEIGHT || 100}
+                            maxHeightOffset={fire.smokeConfig.HEIGHT_MAX || 100}
                             lat={fire.lat}
                             lon={fire.lon}
                         />
