@@ -27,6 +27,10 @@ https://github.com/simondevyoutube/ThreeJS_Tutorial_BlendModes/tree/master
 # Wildfires
 
 สร้าง effect ควัน (plume) แบบนี้ให้หน่อย สามารถ config.tsx ได้ด้วยเพื่อจำลองความสูงที่ควันจะจางหายไป และแรงลม 3 ระดับ
+
+
+https://www.hidalgo2.eu/wildfires-2/ 
+
 [https://www.youtube.com/watch?v=XA74YEkLvVg&amp;list=PL6eJJqXlr6mVrA5Abk5Ab5APYFpVZi1Zk&amp;t=1s](https://www.youtube.com/watch?v=XA74YEkLvVg&list=PL6eJJqXlr6mVrA5Abk5Ab5APYFpVZi1Zk&t=1s)
 
 # Plume & Smoke

@@ -9,8 +9,11 @@ interface SmokeConfig {
     SPEED: number;
     DISPERSION: number;
     SIZE: number;
+    SIZE_GROWTH?: number;
     OPACITY: number;
-    COLOR: string;
+    COLOR_INNER?: string;
+    COLOR_OUTER?: string;
+    COLOR_RATIO?: number;
     HEIGHT_MAX?: number;
 }
 
@@ -304,11 +307,13 @@ export const SmokePlume: React.FC<SmokePlumeProps> = ({ position, config, windLa
             const mat = pointsRef.current.material as THREE.ShaderMaterial;
             const cfg = configRef.current;
             if (mat && mat.uniforms) {
-                if (mat.uniforms.color) mat.uniforms.color.value.set(cfg.COLOR);
-                if (mat.uniforms.colorOuter) mat.uniforms.colorOuter.value.set(cfg.COLOR).offsetHSL(0, 0, 0.3); // Automatically lighter
+                if (mat.uniforms.color) mat.uniforms.color.value.set(cfg.COLOR_INNER || '#ffffff');
+                if (mat.uniforms.colorOuter) mat.uniforms.colorOuter.value.set(cfg.COLOR_OUTER || '#000000');
+                if (mat.uniforms.colorRatio) mat.uniforms.colorRatio.value = cfg.COLOR_RATIO ?? 0.8;
                 if (mat.uniforms.globalOpacity) mat.uniforms.globalOpacity.value = cfg.OPACITY;
                 // Scale is World Units Size
                 if (mat.uniforms.scale) mat.uniforms.scale.value = cfg.SIZE * scale;
+                if (mat.uniforms.sizeGrowth) mat.uniforms.sizeGrowth.value = cfg.SIZE_GROWTH ?? 20.0;
                 // MaxHeight is in meters
                 const h = (cfg.HEIGHT_MAX || cfg.HEIGHT_MIN || 100);
                 if (mat.uniforms.maxHeight) mat.uniforms.maxHeight.value = h;
@@ -328,10 +333,12 @@ export const SmokePlume: React.FC<SmokePlumeProps> = ({ position, config, windLa
     const smokeShader = useMemo(() => ({
         uniforms: {
             tex: { value: texture },
-            color: { value: new THREE.Color(config.COLOR) },
-            colorOuter: { value: new THREE.Color(config.COLOR).offsetHSL(0, -0.2, 0.2) }, // Darker/Lighter variation
+            color: { value: new THREE.Color(config.COLOR_INNER || '#ffffff') },
+            colorOuter: { value: new THREE.Color(config.COLOR_OUTER || '#000000') },
+            colorRatio: { value: config.COLOR_RATIO ?? 0.8 },
             globalOpacity: { value: config.OPACITY },
             scale: { value: config.SIZE * scale },
+            sizeGrowth: { value: config.SIZE_GROWTH ?? 20.0 },
             maxHeight: { value: maxHeightOffset }
         },
         // ... (rest of shader def, keeping vertexShader string inline in return if preferred, OR defined here)
@@ -386,13 +393,16 @@ export const SmokePlume: React.FC<SmokePlumeProps> = ({ position, config, windLa
                     uniform float scale;
                     uniform float maxHeight;
                     
-                    void main() {
+                        // Size: Start large, expand massively with height (Y is up in local space)
+                        uniform float sizeGrowth;
+                        
+                        void main() {
                         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
                         gl_Position = projectionMatrix * mvPosition;
                         
                         // Size: Start large, expand massively with height (Y is up in local space)
                         float heightRatio = position.y / maxHeight;
-                        float growth = 2.0 + heightRatio * 15.0; 
+                        float growth = 2.0 + heightRatio * sizeGrowth; 
                         
                         // Pass normalized distance from center axis (X, Z) to fragment
                         // Normalize by expected growth width approx
@@ -416,6 +426,7 @@ export const SmokePlume: React.FC<SmokePlumeProps> = ({ position, config, windLa
                     uniform vec3 colorOuter;
                     uniform sampler2D tex;
                     uniform float globalOpacity;
+                    uniform float colorRatio;
                     varying float vAlpha;
                     varying float vDist;
                     
@@ -425,7 +436,34 @@ export const SmokePlume: React.FC<SmokePlumeProps> = ({ position, config, windLa
                         if (texColor.a < 0.05) discard;
                         
                         // Gradient Color: Mix Inner (color) and Outer (colorOuter) based on vDist
-                        vec3 finalColor = mix(color, colorOuter, min(1.0, vDist * 1.5));
+                        // Use colorRatio to control the blending curve
+                        // ratio 0.8 means 80% is inner color? 
+                        // Let's scale vDist so that at ratio it reaches 1?
+                        
+                        // User request: blending ratio between inner and outer.
+                        // We use smoothstep to control the transition.
+                        // Lower ratio = more outer color ? Or more inner?
+                        // Assuming ratio 0.8 implies "mostly inner", so transition happens late.
+                        
+                        // Simple mix:
+                        // float mixFactor = smoothstep(0.0, 1.0/colorRatio, vDist); // If ratio is high (0.8), 1/0.8 = 1.25. vDist(0..1) -> 0..0.8. Mix factor never 1?
+                        
+                        // Let's try: vDist goes 0..1 (center to edge)
+                        // Gradient should follow vDist.
+                        // Map vDist range [0.0, 1.0 - ratio] ??? No.
+                        
+                        // Let's use simple scaling:
+                        // factor = vDist * (1.0 / (1.0 - colorRatio)); // If ratio 0.8 -> factor = vDist * 5. 
+                        // So at vDist 0.2, factor is 1. Full outer. 
+                        // This means ratio 0.8 => 80% Inner? No, 80% Outer?
+                        
+                        // If ratio = 0.8. We want 80% of the puff to be Inner-ish?
+                        // Then transition starts at 0.8?
+                        // smoothstep(colorRatio - 0.2, 1.0, vDist);
+                        
+                        float mixFactor = smoothstep(0.0, 2.0 * (1.0 - colorRatio + 0.1), vDist); 
+                        
+                        vec3 finalColor = mix(color, colorOuter, min(1.0, vDist * (1.0/colorRatio)));
 
                         // Softer edges
                         float alpha = texColor.a * globalOpacity * vAlpha;

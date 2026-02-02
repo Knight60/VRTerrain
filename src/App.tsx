@@ -146,8 +146,11 @@ function App() {
         SPEED: TERRAIN_CONFIG.FIRES[0].SMOKE.SPEED,
         DISPERSION: TERRAIN_CONFIG.FIRES[0].SMOKE.DISPERSION,
         SIZE: TERRAIN_CONFIG.FIRES[0].SMOKE.SIZE,
+        SIZE_GROWTH: TERRAIN_CONFIG.FIRES[0].SMOKE.SIZE_GROWTH,
         OPACITY: TERRAIN_CONFIG.FIRES[0].SMOKE.OPACITY,
-        COLOR: TERRAIN_CONFIG.FIRES[0].SMOKE.COLOR,
+        COLOR_INNER: TERRAIN_CONFIG.FIRES[0].SMOKE.COLOR_INNER,
+        COLOR_OUTER: TERRAIN_CONFIG.FIRES[0].SMOKE.COLOR_OUTER,
+        COLOR_RATIO: TERRAIN_CONFIG.FIRES[0].SMOKE.COLOR_RATIO,
         HEIGHT_MAX: TERRAIN_CONFIG.FIRES[0].SMOKE.HEIGHT_MAX
     });
 
@@ -903,12 +906,62 @@ function App() {
                                 </div>
 
                                 <div>
-                                    <label className="text-xs text-gray-400">Color</label>
+                                    <label className="text-xs text-gray-400">Expansion (Growth): {smokeConfig.SIZE_GROWTH ?? 20}</label>
                                     <input
-                                        type="color"
-                                        value={smokeConfig.COLOR}
-                                        onChange={(e) => setSmokeConfig(prev => ({ ...prev, COLOR: e.target.value }))}
-                                        className="w-full mt-1 h-8 bg-black/30 border border-white/20 rounded cursor-pointer"
+                                        type="range"
+                                        min="0"
+                                        max="100"
+                                        step="1"
+                                        value={smokeConfig.SIZE_GROWTH ?? 20}
+                                        onChange={(e) => setSmokeConfig(prev => ({ ...prev, SIZE_GROWTH: parseFloat(e.target.value) }))}
+                                        className="w-full mt-1 accent-white"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="text-xs text-gray-400">Smoke Opacity: {smokeConfig.OPACITY.toFixed(2)}</label>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="1"
+                                        step="0.05"
+                                        value={smokeConfig.OPACITY}
+                                        onChange={(e) => setSmokeConfig(prev => ({ ...prev, OPACITY: parseFloat(e.target.value) }))}
+                                        className="w-full mt-1 accent-white"
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label className="text-xs text-gray-400">Inner Color</label>
+                                        <input
+                                            type="color"
+                                            value={smokeConfig.COLOR_INNER || '#ffffff'}
+                                            onChange={(e) => setSmokeConfig(prev => ({ ...prev, COLOR_INNER: e.target.value }))}
+                                            className="w-full mt-1 h-8 bg-black/30 border border-white/20 rounded cursor-pointer"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-400">Outer Color</label>
+                                        <input
+                                            type="color"
+                                            value={smokeConfig.COLOR_OUTER || '#000000'}
+                                            onChange={(e) => setSmokeConfig(prev => ({ ...prev, COLOR_OUTER: e.target.value }))}
+                                            className="w-full mt-1 h-8 bg-black/30 border border-white/20 rounded cursor-pointer"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="text-xs text-gray-400">Gradient Ratio: {smokeConfig.COLOR_RATIO ?? 0.8}</label>
+                                    <input
+                                        type="range"
+                                        min="0.1"
+                                        max="1.0"
+                                        step="0.1"
+                                        value={smokeConfig.COLOR_RATIO ?? 0.8}
+                                        onChange={(e) => setSmokeConfig(prev => ({ ...prev, COLOR_RATIO: parseFloat(e.target.value) }))}
+                                        className="w-full mt-1 accent-gray-500"
                                     />
                                 </div>
                             </div>

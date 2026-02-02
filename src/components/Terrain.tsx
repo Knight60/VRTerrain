@@ -59,8 +59,11 @@ interface FireConfig {
         SPEED: number;
         DISPERSION: number;
         SIZE: number;
+        SIZE_GROWTH?: number;
         OPACITY: number;
-        COLOR: string;
+        COLOR_INNER?: string;
+        COLOR_OUTER?: string;
+        COLOR_RATIO?: number;
         HEIGHT_MAX?: number;
     };
 }
