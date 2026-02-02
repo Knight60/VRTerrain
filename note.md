@@ -20,13 +20,23 @@ https://github.com/mattatz/THREE.Fire?tab=readme-ov-file
 
 Realtime Volumetrix
 
-# Plume
+https://www.youtube.com/watch?v=AxopC4yW4uY
+
+https://github.com/simondevyoutube/ThreeJS_Tutorial_BlendModes/tree/master
+
+# Wildfires
+
+สร้าง effect ควัน (plume) แบบนี้ให้หน่อย สามารถ config.tsx ได้ด้วยเพื่อจำลองความสูงที่ควันจะจางหายไป และแรงลม 3 ระดับ
+[https://www.youtube.com/watch?v=XA74YEkLvVg&amp;list=PL6eJJqXlr6mVrA5Abk5Ab5APYFpVZi1Zk&amp;t=1s](https://www.youtube.com/watch?v=XA74YEkLvVg&list=PL6eJJqXlr6mVrA5Abk5Ab5APYFpVZi1Zk&t=1s)
+
+# Plume & Smoke
 
 https://github.com/neungkl/fire-simulation?tab=readme-ov-file
 
 https://www.derschmale.com/lab/doodles/smokesim/build/
 
+https://github.com/topics/smoke-simulation?o=desc&s=updated
 
-# Particle
+Particle
 
 https://github.com/creativelifeform/three-nebula

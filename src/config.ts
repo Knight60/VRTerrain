@@ -78,11 +78,21 @@ export const TERRAIN_CONFIG = {
         GLOBAL_HEIGHT_SCALAR: 0.1, // Scale all cloud heights
         LAYERS: [
             // Level 1: Low, Sparse (0.5 - 2 km)
-            { minAlt: 1.0, maxAlt: 7.0, count: 0, opacity: 0.3, minSize: 10, maxSize: 30, speed: 0.5, color: '#ffffff' },
+            { minAlt: 1.0, maxAlt: 7.0, count: 0, opacity: 0.3, minSize: 10, maxSize: 30, color: '#ffffff' },
             // Level 2: Mid, Medium (2 - 6 km)
-            { minAlt: 5.0, maxAlt: 12.0, count: 500, opacity: 0.2, minSize: 70, maxSize: 100, speed: 15, color: '#ffffff' },
+            { minAlt: 5.0, maxAlt: 12.0, count: 500, opacity: 0.2, minSize: 70, maxSize: 100, color: '#ffffff' },
             // Level 3: High, Dense (10 - 20 km)
-            { minAlt: 10.0, maxAlt: 20.0, count: 800, opacity: 0.1, minSize: 100, maxSize: 200, speed: 25, color: '#fff0e0' }
+            { minAlt: 10.0, maxAlt: 20.0, count: 800, opacity: 0.1, minSize: 100, maxSize: 200, color: '#fff0e0' }
+        ]
+    },
+
+    // Wind Settings (matches Cloud Layers)
+    WIND: {
+        ENABLED: true,
+        LAYERS: [
+            { speed: 0.5, direction: 270 }, // Direction in degrees (0 = North, 90 = East, 180 = South, 270 = West)
+            { speed: 15, direction: 270 },
+            { speed: 25, direction: 270 }
         ]
     },
 

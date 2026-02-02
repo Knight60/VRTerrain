@@ -70,6 +70,10 @@ function App() {
         globalHeightScalar: TERRAIN_CONFIG.CLOUDS.GLOBAL_HEIGHT_SCALAR,
         layers: TERRAIN_CONFIG.CLOUDS.LAYERS.map(l => ({ ...l }))
     });
+    const [windConfig, setWindConfig] = React.useState({
+        enabled: TERRAIN_CONFIG.WIND.ENABLED,
+        layers: TERRAIN_CONFIG.WIND.LAYERS.map(l => ({ ...l }))
+    });
     const [contourConfig, setContourConfig] = React.useState({
         enabled: TERRAIN_CONFIG.CONTOURS.ENABLED,
         interval: TERRAIN_CONFIG.CONTOURS.INTERVAL,
@@ -477,15 +481,35 @@ function App() {
                                             />
                                         </div>
                                         <div>
-                                            <label className="text-xs text-gray-400">Speed</label>
+                                            <label className="text-xs text-gray-400">Wind Speed</label>
                                             <input
                                                 type="number"
                                                 step="1"
-                                                value={layer.speed}
+                                                value={windConfig.layers[index]?.speed || 0}
                                                 onChange={(e) => {
-                                                    const newLayers = [...cloudConfig.layers];
-                                                    newLayers[index] = { ...newLayers[index], speed: parseFloat(e.target.value) || 0 };
-                                                    setCloudConfig(prev => ({ ...prev, layers: newLayers }));
+                                                    const newLayers = [...windConfig.layers];
+                                                    if (newLayers[index]) {
+                                                        newLayers[index] = { ...newLayers[index], speed: parseFloat(e.target.value) || 0 };
+                                                        setWindConfig(prev => ({ ...prev, layers: newLayers }));
+                                                    }
+                                                }}
+                                                className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-gray-400">Wind Dir (°)</label>
+                                            <input
+                                                type="number"
+                                                step="10"
+                                                min="0"
+                                                max="360"
+                                                value={windConfig.layers[index]?.direction || 0}
+                                                onChange={(e) => {
+                                                    const newLayers = [...windConfig.layers];
+                                                    if (newLayers[index]) {
+                                                        newLayers[index] = { ...newLayers[index], direction: parseFloat(e.target.value) || 0 };
+                                                        setWindConfig(prev => ({ ...prev, layers: newLayers }));
+                                                    }
                                                 }}
                                                 className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
                                             />
@@ -786,6 +810,7 @@ function App() {
                         enableMicroDisplacement={enableMicroDisplacement}
                         disableHover={isInteracting}
                         cloudConfig={cloudConfig}
+                        windConfig={windConfig}
                         contourConfig={contourConfig}
                         fireConfigs={React.useMemo(() => {
                             const firstFire = {

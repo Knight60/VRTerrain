@@ -14,7 +14,6 @@ interface CloudLayerConfig {
     opacity: number;
     minSize: number;
     maxSize: number;
-    speed: number;
     color: string;
 }
 
@@ -23,6 +22,16 @@ interface CloudConfig {
     globalHeightOffset: number;
     globalHeightScalar: number;
     layers: CloudLayerConfig[];
+}
+
+interface WindLayerConfig {
+    speed: number;
+    direction: number;
+}
+
+interface WindConfig {
+    enabled: boolean;
+    layers: WindLayerConfig[];
 }
 
 interface ContourConfig {
@@ -56,6 +65,7 @@ interface TerrainProps {
     disableHover?: boolean;
     enableMicroDisplacement?: boolean;
     cloudConfig?: CloudConfig;
+    windConfig?: WindConfig;
     contourConfig?: ContourConfig;
     fireConfigs?: FireConfig[];
 }
@@ -121,7 +131,7 @@ const createSedimentTexture = () => {
     return tex;
 };
 
-const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: number, max: number) => void }> = ({ shape, exaggeration = 100, paletteColors, onHeightRangeChange, showSoilProfile = true, baseMapName = null, onHover, disableHover = false, enableMicroDisplacement = true, cloudConfig, contourConfig, fireConfigs }) => {
+const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: number, max: number) => void }> = ({ shape, exaggeration = 100, paletteColors, onHeightRangeChange, showSoilProfile = true, baseMapName = null, onHover, disableHover = false, enableMicroDisplacement = true, cloudConfig, windConfig, contourConfig, fireConfigs }) => {
     const [terrainData, setTerrainData] = useState<{ width: number; height: number; data: Float32Array; minHeight: number; maxHeight: number } | null>(null);
     const [previousTerrainData, setPreviousTerrainData] = useState<typeof terrainData>(null);
     const [isLoadingTerrain, setIsLoadingTerrain] = useState(false);
@@ -1238,7 +1248,6 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
                     alphaMap={alphaMap}
                     transparent={shape === 'ellipse'}
                     alphaTest={shape === 'ellipse' ? 0.1 : 0}
-                    side={THREE.DoubleSide}
                 />
             </mesh>
 
@@ -1267,7 +1276,6 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
                     polygonOffset={true}
                     polygonOffsetFactor={-1}
                     alphaTest={shape === 'ellipse' ? 0.1 : 0}
-                    side={THREE.DoubleSide}
                 />
             </mesh>
 
@@ -1283,7 +1291,7 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
             )}
             {terrainData && <Contours terrainData={terrainData} exaggeration={exaggeration} shape={shape} config={contourConfig} />}
             {terrainData && <Fire exaggeration={exaggeration} terrainData={terrainData} configs={fireConfigs} bounds={activeTextureBounds} />}
-            <Clouds exaggeration={exaggeration} cloudConfig={cloudConfig} />
+            <Clouds exaggeration={exaggeration} cloudConfig={cloudConfig} windConfig={windConfig} />
         </group>
     );
 };
