@@ -46,7 +46,7 @@ const createSmokeTexture = () => {
 };
 
 export const SmokePlume: React.FC<SmokePlumeProps> = ({ position, config, windLayer, scale, maxHeightOffset, lat, lon }) => {
-    const particleCount = 2000; // Increased for natural dispersion
+    const particleCount = 500; // Reduced for large visible puffs
 
     // Create a softer, cloudy texture
     const texture = useMemo(() => {
@@ -129,16 +129,16 @@ export const SmokePlume: React.FC<SmokePlumeProps> = ({ position, config, windLa
     // Particle State (CPU side)
     const particleData = useMemo(() => {
         return Array.from({ length: particleCount }).map((_, i) => ({
-            age: (i / particleCount) * 5, // Stagger initial ages for continuous flow
-            life: 3 + Math.random() * 3, // Moderate life for natural dispersion
+            age: (i / particleCount) * 6, // Stagger initial ages for continuous flow
+            life: 4 + Math.random() * 4, // Longer life for smoke to travel
             x: 0,
             y: 0, // Y is UP after rotation [Math.PI/2, 0, 0]
             z: 0,
-            vx: (Math.random() - 0.5) * 0.3,
-            vy: 1.0 + Math.random() * 0.5, // Y is UP (becomes World Z after rotation)
-            vz: (Math.random() - 0.5) * 0.3,
+            vx: (Math.random() - 0.5) * 0.05, // Minimal horizontal velocity at start
+            vy: 2.0 + Math.random() * 1.0, // Strong upward velocity
+            vz: (Math.random() - 0.5) * 0.05, // Minimal horizontal velocity at start
             offset: Math.random() * Math.PI * 2,
-            size: 0.8 + Math.random() * 0.4, // Individual particle size variation
+            size: 0.8 + Math.random() * 0.6, // Individual particle size variation
         }));
     }, [particleCount]);
 
@@ -173,41 +173,41 @@ export const SmokePlume: React.FC<SmokePlumeProps> = ({ position, config, windLa
             // Reset if too old or too high (Y-UP in local space)
             if (p.age > p.life || p.y > maxRise) {
                 p.age = 0;
-                p.life = 3 + Math.random() * 3; // Moderate life for natural dispersion
-                // Start with wider spread at the source (like real fire)
-                const startSpread = 0.5; // In world units, not scaled
+                p.life = 4 + Math.random() * 4; // Longer life for smoke to travel
+                // Start very tight at the source
+                const startSpread = 0.3; // Very small spread at fire base
                 p.x = (Math.random() - 0.5) * startSpread;
-                p.y = 1.0; // Start 1 meter above base
+                p.y = 0.5; // Start 0.5 meter above base
                 p.z = (Math.random() - 0.5) * startSpread;
 
-                // Initial Velocity: More horizontal spread (in meters/sec)
-                p.vx = (Math.random() - 0.5) * cfg.DISPERSION * 0.3;
-                p.vz = (Math.random() - 0.5) * cfg.DISPERSION * 0.3;
-                // Upward speed with variation (Y is up in local space)
-                p.vy = cfg.SPEED * (0.8 + Math.random() * 0.8);
-                p.size = 0.8 + Math.random() * 0.4;
+                // Initial Velocity: Mostly upward, minimal spread
+                p.vx = (Math.random() - 0.5) * cfg.DISPERSION * 0.05;
+                p.vz = (Math.random() - 0.5) * cfg.DISPERSION * 0.05;
+                // Strong upward speed (Y is up in local space)
+                p.vy = cfg.SPEED * (1.5 + Math.random() * 1.0);
+                p.size = 0.8 + Math.random() * 0.6;
             } else {
                 // Wind effect increases strongly with height (Y is up)
                 const heightRatio = p.y / maxRise;
-                const windFactor = Math.pow(heightRatio, 0.5); // Square root for gradual increase
+                const windFactor = Math.pow(heightRatio, 1.5); // Stronger increase with height
 
-                // Strong billowing expansion: Smoke disperses more at higher altitudes
-                const spreadFactor = 1.0 + heightRatio * 4.0;
+                // Gentle expansion as smoke rises
+                const spreadFactor = 1.0 + heightRatio * 2.0;
 
-                // Strong turbulence for natural look
+                // Gentle turbulence for natural billowing (reduced from 2.5)
                 const turbulence = {
-                    x: Math.sin(state.clock.elapsedTime * 0.4 + p.offset + p.y * 0.15) * 2.5,
-                    y: Math.sin(state.clock.elapsedTime * 0.25 + p.offset * 0.7) * 0.5,
-                    z: Math.cos(state.clock.elapsedTime * 0.3 + p.offset * 1.3 + p.y * 0.12) * 2.5
+                    x: Math.sin(state.clock.elapsedTime * 0.3 + p.offset + p.y * 0.1) * 0.8,
+                    y: Math.sin(state.clock.elapsedTime * 0.2 + p.offset * 0.5) * 0.2,
+                    z: Math.cos(state.clock.elapsedTime * 0.25 + p.offset * 0.8 + p.y * 0.08) * 0.8
                 };
 
-                // Update position with strong wind and turbulence (meters)
-                p.x += (p.vx * spreadFactor + windDx * windSpeed * windFactor * 1.5 + turbulence.x) * delta;
+                // Update position: Rise straight, then drift with wind
+                p.x += (p.vx * spreadFactor + windDx * windSpeed * windFactor * 3.0 + turbulence.x) * delta;
                 p.y += (p.vy + turbulence.y) * delta; // Y is vertical
-                p.z += (p.vz * spreadFactor + windDy * windSpeed * windFactor * 1.5 + turbulence.z) * delta;
+                p.z += (p.vz * spreadFactor + windDy * windSpeed * windFactor * 3.0 + turbulence.z) * delta;
 
-                // Gradual slowdown as smoke rises
-                p.vy *= 0.995;
+                // Very gradual slowdown as smoke rises
+                p.vy *= 0.998;
             }
 
             // Update buffer (after rotation [PI/2,0,0]: local Y becomes world Z)
@@ -359,21 +359,21 @@ export const SmokePlume: React.FC<SmokePlumeProps> = ({ position, config, windLa
                         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
                         gl_Position = projectionMatrix * mvPosition;
                         
-                        // Size: Start small, expand naturally with height (Y is up in local space)
+                        // Size: Start large, expand massively with height (Y is up in local space)
                         float heightRatio = position.y / maxHeight;
-                        float growth = 1.0 + heightRatio * 4.0; 
+                        float growth = 2.0 + heightRatio * 15.0; // Start bigger, grow much larger
                         
-                        // Smaller base size for natural dispersion
-                        gl_PointSize = max(5.0, scale * growth * (3000.0 / -mvPosition.z)); 
+                        // Much larger base size for visible smoke puffs
+                        gl_PointSize = max(30.0, scale * growth * (12000.0 / -mvPosition.z)); 
                         
                         // Natural fade: fade in quickly, fade out gradually at top (Y is up)
                         float h = max(0.0, position.y);
                         // Gradual fade out at the top
-                        vAlpha = 1.0 - smoothstep(maxHeight * 0.5, maxHeight, h);
+                        vAlpha = 1.0 - smoothstep(maxHeight * 0.4, maxHeight, h);
                         // Very quick fade in at bottom
                         vAlpha *= smoothstep(0.0, maxHeight * 0.01, h);
                         // Additional opacity variation for natural look
-                        vAlpha *= 0.6 + 0.4 * (1.0 - heightRatio);
+                        vAlpha *= 0.7 + 0.3 * (1.0 - heightRatio);
                     }
                 `}
                 fragmentShader={`
@@ -389,7 +389,7 @@ export const SmokePlume: React.FC<SmokePlumeProps> = ({ position, config, windLa
                         
                         // Softer edges for natural smoke appearance
                         float alpha = texColor.a * globalOpacity * vAlpha;
-                        alpha *= 0.7; // Reduce overall opacity for wispy smoke
+                        alpha *= 0.9; // Slightly more opaque for visibility
                         
                         gl_FragColor = vec4(color, alpha);
                     }
