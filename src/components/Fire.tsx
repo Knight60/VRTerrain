@@ -312,13 +312,26 @@ export const Fire: React.FC<FireProps> = ({ exaggeration, terrainData, configs, 
                 const fireScale = (loc.scale || 1.0) * HEIGHT * SPREAD;
                 const scaledZ = (terrainZ + offsetZ) * baseScale;
 
+                // Log position for debugging
+                console.log(`[Fire] Creating instance ${configIdx}-${locIdx}:`, {
+                    lat: loc.lat,
+                    lon: loc.lon,
+                    worldX,
+                    worldY,
+                    terrainZ,
+                    scaledZ,
+                    smokeEnabled: SMOKE?.ENABLED
+                });
+
                 allInstances.push({
                     key: `fire-${configIdx}-${locIdx}`,
                     position: [worldX, worldY, scaledZ],
                     scale: fireScale,
                     iterations: ITERATIONS,
                     octaves: OCTAVES,
-                    smokeConfig: SMOKE
+                    smokeConfig: SMOKE,
+                    lat: loc.lat,
+                    lon: loc.lon
                 });
             });
         });
@@ -349,6 +362,8 @@ export const Fire: React.FC<FireProps> = ({ exaggeration, terrainData, configs, 
                             windLayer={activeWind}
                             scale={baseScale}
                             maxHeightOffset={fire.smokeConfig.MAX_HEIGHT || 100}
+                            lat={fire.lat}
+                            lon={fire.lon}
                         />
                     )}
                 </group>

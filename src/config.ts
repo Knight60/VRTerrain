@@ -102,7 +102,7 @@ export const TERRAIN_CONFIG = {
         INTERVAL: 20,               // Minor contour interval in meters
         MAJOR_INTERVAL: 100,        // Major contour interval (every 5 minor = 100m)
         // Minor contours (every 20m)
-        MINOR_LINE_COLOR: '#686868ff', // Gray for minor lines
+        MINOR_LINE_COLOR: '#686868', // Gray for minor lines
         MINOR_LINE_WIDTH: 1.0,       // Thinner
         MINOR_LINE_OPACITY: 0.5,     // More transparent
         // Major contours (every 100m)
