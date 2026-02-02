@@ -9,34 +9,79 @@ import { calculateBoundsDimensions } from './utils/terrain'
 import * as THREE from 'three'
 import proj4 from 'proj4'
 
+// Smoothly interpolates the OrbitControls target to a destination point
+const SmoothCameraHandler: React.FC<{
+    target: THREE.Vector3 | null;
+    controlsRef: React.RefObject<any>;
+    onTargetReached?: () => void;
+}> = ({ target, controlsRef, onTargetReached }) => {
+    const { camera } = useThree();
+
+    useFrame((state, delta) => {
+        if (!target || !controlsRef.current) return;
+
+        const currentTarget = controlsRef.current.target;
+        const dist = currentTarget.distanceTo(target);
+
+        if (dist < 0.05) {
+            // Reached destination: Snap to exact target and apply final residual offset to camera
+            const offset = new THREE.Vector3().subVectors(target, currentTarget);
+            currentTarget.copy(target);
+            camera.position.add(offset);
+
+            if (onTargetReached) onTargetReached();
+        } else {
+            // Smooth Pan Logic:
+            const speed = TERRAIN_CONFIG.CAMERA?.MOVE_SPEED || 2.0;
+            const step = speed * delta;
+
+            // Calculate interpolation factor (Frame-rate independent damping)
+            const t = 1.0 - Math.pow(0.001, step);
+
+            // Calculate the position for the target in this frame
+            const nextTarget = new THREE.Vector3().copy(currentTarget).lerp(target, t);
+
+            // Calculate the vector difference (Delta)
+            const movementDelta = new THREE.Vector3().subVectors(nextTarget, currentTarget);
+
+            // Apply the SAME movement delta to BOTH the controls.target and camera.position
+            currentTarget.add(movementDelta);
+            camera.position.add(movementDelta);
+        }
+    });
+
+    return null;
+};
+
 // Update OrbitControls target to actual terrain surface at screen center
 const PivotSetter: React.FC<{
     isInteracting: boolean;
     controlsRef: React.RefObject<any>;
 }> = ({ isInteracting, controlsRef }) => {
+    // Keep PivotSetter as is for passive interaction?
+    // It might conflict if SmoothCamera is trying to move. 
+    // BUT PivotSetter only runs when !isInteracting... 
+    // Let's assume double-click overrides it.
+    // For now we keep PivotSetter logic but maybe we should disable it during transition?
     const { camera, scene } = useThree();
     const raycaster = React.useMemo(() => new THREE.Raycaster(), []);
 
-    // Check on interval or when interaction stops
     React.useEffect(() => {
         if (!isInteracting && controlsRef.current) {
-            // Raycast from center of screen (0,0)
             raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-
-            // Intersect with scene objects (filtered by name 'terrain')
-            // Note: We intersect only recursive children.
-            // Performance: This is done once after interaction, so slight cost is acceptable.
             const intersects = raycaster.intersectObjects(scene.children, true);
             const terrainHit = intersects.find(hit => hit.object.name === 'terrain');
 
             if (terrainHit) {
-                // Determine new target
                 const newTarget = terrainHit.point;
                 const currentTarget = controlsRef.current.target;
-
-                // Only update if significantly different to avoid micro-jitter
                 if (newTarget.distanceTo(currentTarget) > 0.1) {
-                    controlsRef.current.target.copy(newTarget);
+                    // controlsRef.current.target.copy(newTarget); // DISABLED PivotSetter for now to favor manual/dbl-click control
+                    // Or keep it? The user specifically asked for dbl click center.
+                    // PivotSetter forces center to be ground level.
+                    // If we dbl click, we center on that point.
+                    // If we pan, PivotSetter re-centers. This might be annoying if we want to look at something specific.
+                    // Let's Disable automatic PivotSetter to avoid fighting with SmoothHandler
                 }
             }
         }
@@ -61,6 +106,10 @@ function App() {
     const [compassRotation, setCompassRotation] = React.useState(0);
     const [hoverInfo, setHoverInfo] = React.useState<{ height: number; lat: number; lon: number } | null>(null);
     const [isInteracting, setIsInteracting] = React.useState(false);
+
+    // Camera transition state
+    const [cameraTarget, setCameraTarget] = React.useState<THREE.Vector3 | null>(null);
+
     const [showCloudDialog, setShowCloudDialog] = React.useState(false);
     const [showContourDialog, setShowContourDialog] = React.useState(false);
     const [showFireDialog, setShowFireDialog] = React.useState(false);
@@ -117,6 +166,13 @@ function App() {
 
     const handleHeightRangeChange = React.useCallback((min: number, max: number) => {
         setElevationRange({ min, max });
+    }, []);
+
+    const handleTerrainDoubleClick = React.useCallback((point: THREE.Vector3) => {
+        // Trigger smooth transition
+        setCameraTarget(point.clone());
+        // Also disable auto-rotate if enabled to prevent conflict?
+        // setAutoRotate(false); 
     }, []);
 
     // Calculate effect parameters
@@ -897,7 +953,11 @@ function App() {
                 performance={{ min: 0.5 }}
                 frameloop="always"
             >
-                <PivotSetter isInteracting={isInteracting} controlsRef={controlsRef} />
+                <SmoothCameraHandler
+                    target={cameraTarget}
+                    controlsRef={controlsRef}
+                    onTargetReached={() => setCameraTarget(null)}
+                />
                 {/* Atmosphere & Lighting */}
                 {/* <fog attach="fog" args={[fogColor, fogNear, fogFar]} /> */}
                 <ambientLight intensity={ambientIntensity} />
@@ -932,6 +992,7 @@ function App() {
                         showSoilProfile={showSoilProfile}
                         baseMapName={baseMapName}
                         onHover={TERRAIN_CONFIG.ENABLE_HOVER_INFO ? setHoverInfo : undefined}
+                        onDoubleClick={handleTerrainDoubleClick}
                         enableMicroDisplacement={enableMicroDisplacement}
                         disableHover={isInteracting}
                         cloudConfig={cloudConfig}

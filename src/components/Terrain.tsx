@@ -72,6 +72,7 @@ interface TerrainProps {
     showSoilProfile?: boolean;
     baseMapName?: string | null;
     onHover?: (data: { height: number; lat: number; lon: number } | null) => void;
+    onDoubleClick?: (point: THREE.Vector3) => void;
     disableHover?: boolean;
     enableMicroDisplacement?: boolean;
     cloudConfig?: CloudConfig;
@@ -141,7 +142,7 @@ const createSedimentTexture = () => {
     return tex;
 };
 
-const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: number, max: number) => void }> = ({ shape, exaggeration = 100, paletteColors, onHeightRangeChange, showSoilProfile = true, baseMapName = null, onHover, disableHover = false, enableMicroDisplacement = true, cloudConfig, windConfig, contourConfig, fireConfigs }) => {
+const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: number, max: number) => void }> = ({ shape, exaggeration = 100, paletteColors, onHeightRangeChange, showSoilProfile = true, baseMapName = null, onHover, onDoubleClick, disableHover = false, enableMicroDisplacement = true, cloudConfig, windConfig, contourConfig, fireConfigs }) => {
     const [terrainData, setTerrainData] = useState<{ width: number; height: number; data: Float32Array; minHeight: number; maxHeight: number } | null>(null);
     const [previousTerrainData, setPreviousTerrainData] = useState<typeof terrainData>(null);
     const [isLoadingTerrain, setIsLoadingTerrain] = useState(false);
@@ -1223,6 +1224,10 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
                     handlePointerMove(e);
                 } : undefined}
                 onPointerOut={onHover ? () => onHover(null) : undefined}
+                onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    if (onDoubleClick) onDoubleClick(e.point);
+                }}
             >
                 <meshStandardMaterial
                     vertexColors={true}
@@ -1248,6 +1253,10 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
                     handlePointerMove(e);
                 } : undefined}
                 onPointerOut={onHover ? () => onHover(null) : undefined}
+                onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    if (onDoubleClick) onDoubleClick(e.point);
+                }}
             >
                 <meshStandardMaterial
                     map={baseMapTexture}
@@ -1274,6 +1283,10 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
                     handlePointerMove(e);
                 } : undefined}
                 onPointerOut={onHover ? () => onHover(null) : undefined}
+                onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    if (onDoubleClick) onDoubleClick(e.point);
+                }}
             >
                 <meshStandardMaterial
                     map={detailMapTexture}
