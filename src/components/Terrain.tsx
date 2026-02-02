@@ -1192,6 +1192,7 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
             {/* Top Surface */}
             {/* Top Surface - Palette Mode (Vertex Colors) */}
             <mesh
+                name="terrain"
                 geometry={topGeometry}
                 receiveShadow
                 castShadow
@@ -1216,6 +1217,7 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
 
             {/* Top Surface - Base Map Mode (Background) */}
             <mesh
+                name="terrain"
                 geometry={topGeometry}
                 receiveShadow
                 castShadow
@@ -1236,11 +1238,13 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
                     alphaMap={alphaMap}
                     transparent={shape === 'ellipse'}
                     alphaTest={shape === 'ellipse' ? 0.1 : 0}
+                    side={THREE.DoubleSide}
                 />
             </mesh>
 
             {/* Top Surface - Detail Map Mode (High Res Overlay) */}
             <mesh
+                name="terrain"
                 geometry={topGeometry}
                 // No shadows for overlay
                 scale={[1, 1, baseScale]}
@@ -1263,6 +1267,7 @@ const TerrainComponent: React.FC<TerrainProps & { onHeightRangeChange?: (min: nu
                     polygonOffset={true}
                     polygonOffsetFactor={-1}
                     alphaTest={shape === 'ellipse' ? 0.1 : 0}
+                    side={THREE.DoubleSide}
                 />
             </mesh>
 

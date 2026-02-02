@@ -1,6 +1,6 @@
 
 import React, { Suspense } from 'react'
-import { Canvas } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Sky, Environment, Stars } from '@react-three/drei'
 import { Terrain } from './components/Terrain'
 import { CameraTracker } from './components/CameraTracker'
@@ -8,6 +8,42 @@ import { TERRAIN_CONFIG } from './config'
 import { calculateBoundsDimensions } from './utils/terrain'
 import * as THREE from 'three'
 import proj4 from 'proj4'
+
+// Update OrbitControls target to actual terrain surface at screen center
+const PivotSetter: React.FC<{
+    isInteracting: boolean;
+    controlsRef: React.RefObject<any>;
+}> = ({ isInteracting, controlsRef }) => {
+    const { camera, scene } = useThree();
+    const raycaster = React.useMemo(() => new THREE.Raycaster(), []);
+
+    // Check on interval or when interaction stops
+    React.useEffect(() => {
+        if (!isInteracting && controlsRef.current) {
+            // Raycast from center of screen (0,0)
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+
+            // Intersect with scene objects (filtered by name 'terrain')
+            // Note: We intersect only recursive children.
+            // Performance: This is done once after interaction, so slight cost is acceptable.
+            const intersects = raycaster.intersectObjects(scene.children, true);
+            const terrainHit = intersects.find(hit => hit.object.name === 'terrain');
+
+            if (terrainHit) {
+                // Determine new target
+                const newTarget = terrainHit.point;
+                const currentTarget = controlsRef.current.target;
+
+                // Only update if significantly different to avoid micro-jitter
+                if (newTarget.distanceTo(currentTarget) > 0.1) {
+                    controlsRef.current.target.copy(newTarget);
+                }
+            }
+        }
+    }, [isInteracting, camera, scene, controlsRef, raycaster]);
+
+    return null;
+};
 
 function App() {
     const [shape, setShape] = React.useState<'rectangle' | 'ellipse'>(TERRAIN_CONFIG.DEFAULT_SHAPE as 'rectangle' | 'ellipse');
@@ -85,7 +121,7 @@ function App() {
             }}
         >
             {/* UI Overlay */}
-            <div className="absolute top-6 left-6 z-10 text-white font-sans pointer-events-none select-none">
+            < div className="absolute top-6 left-6 z-10 text-white font-sans pointer-events-none select-none" >
                 <h1 className="text-4xl font-bold drop-shadow-lg tracking-tight bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
                     Terrain Explorer
                 </h1>
@@ -296,388 +332,394 @@ function App() {
                         </div>
                     </div>
                 </div>
-            </div>
+            </div >
 
             {/* Cloud Configuration Dialog */}
-            {showCloudDialog && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <div className="bg-gray-900/95 border border-white/20 rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-2xl">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-xl font-bold text-emerald-400">☁️ Cloud Configuration</h2>
-                            <button
-                                onClick={() => setShowCloudDialog(false)}
-                                className="text-gray-400 hover:text-white text-2xl leading-none"
-                            >
-                                ×
-                            </button>
-                        </div>
-
-                        {/* Global Settings */}
-                        <div className="mb-6 p-4 bg-white/5 rounded-lg border border-white/10">
-                            <h3 className="text-sm font-semibold text-cyan-300 mb-3">Global Settings</h3>
-                            <div className="grid grid-cols-2 gap-4">
-                                <label className="flex items-center gap-2 text-xs text-gray-300">
-                                    <input
-                                        type="checkbox"
-                                        checked={cloudConfig.enabled}
-                                        onChange={(e) => setCloudConfig(prev => ({ ...prev, enabled: e.target.checked }))}
-                                        className="accent-emerald-500"
-                                    />
-                                    Enable Clouds
-                                </label>
-                                <div>
-                                    <label className="text-xs text-gray-400">Height Scalar</label>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        value={cloudConfig.globalHeightScalar}
-                                        onChange={(e) => setCloudConfig(prev => ({ ...prev, globalHeightScalar: parseFloat(e.target.value) || 0 }))}
-                                        className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-xs text-gray-400">Height Offset (km)</label>
-                                    <input
-                                        type="number"
-                                        step="0.1"
-                                        value={cloudConfig.globalHeightOffset}
-                                        onChange={(e) => setCloudConfig(prev => ({ ...prev, globalHeightOffset: parseFloat(e.target.value) || 0 }))}
-                                        className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
-                                    />
-                                </div>
+            {
+                showCloudDialog && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                        <div className="bg-gray-900/95 border border-white/20 rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-2xl">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-xl font-bold text-emerald-400">☁️ Cloud Configuration</h2>
+                                <button
+                                    onClick={() => setShowCloudDialog(false)}
+                                    className="text-gray-400 hover:text-white text-2xl leading-none"
+                                >
+                                    ×
+                                </button>
                             </div>
-                        </div>
 
-                        {/* Layer Settings */}
-                        {cloudConfig.layers.map((layer, index) => (
-                            <div key={index} className="mb-4 p-4 bg-white/5 rounded-lg border border-white/10">
-                                <h3 className="text-sm font-semibold text-cyan-300 mb-3">Layer {index + 1}</h3>
-                                <div className="grid grid-cols-4 gap-3">
+                            {/* Global Settings */}
+                            <div className="mb-6 p-4 bg-white/5 rounded-lg border border-white/10">
+                                <h3 className="text-sm font-semibold text-cyan-300 mb-3">Global Settings</h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <label className="flex items-center gap-2 text-xs text-gray-300">
+                                        <input
+                                            type="checkbox"
+                                            checked={cloudConfig.enabled}
+                                            onChange={(e) => setCloudConfig(prev => ({ ...prev, enabled: e.target.checked }))}
+                                            className="accent-emerald-500"
+                                        />
+                                        Enable Clouds
+                                    </label>
                                     <div>
-                                        <label className="text-xs text-gray-400">Min Alt (km)</label>
+                                        <label className="text-xs text-gray-400">Height Scalar</label>
                                         <input
                                             type="number"
-                                            step="0.5"
-                                            value={layer.minAlt}
-                                            onChange={(e) => {
-                                                const newLayers = [...cloudConfig.layers];
-                                                newLayers[index] = { ...newLayers[index], minAlt: parseFloat(e.target.value) || 0 };
-                                                setCloudConfig(prev => ({ ...prev, layers: newLayers }));
-                                            }}
+                                            step="0.01"
+                                            value={cloudConfig.globalHeightScalar}
+                                            onChange={(e) => setCloudConfig(prev => ({ ...prev, globalHeightScalar: parseFloat(e.target.value) || 0 }))}
                                             className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-xs text-gray-400">Max Alt (km)</label>
-                                        <input
-                                            type="number"
-                                            step="0.5"
-                                            value={layer.maxAlt}
-                                            onChange={(e) => {
-                                                const newLayers = [...cloudConfig.layers];
-                                                newLayers[index] = { ...newLayers[index], maxAlt: parseFloat(e.target.value) || 0 };
-                                                setCloudConfig(prev => ({ ...prev, layers: newLayers }));
-                                            }}
-                                            className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs text-gray-400">Count</label>
-                                        <input
-                                            type="number"
-                                            step="10"
-                                            value={layer.count}
-                                            onChange={(e) => {
-                                                const newLayers = [...cloudConfig.layers];
-                                                newLayers[index] = { ...newLayers[index], count: parseInt(e.target.value) || 0 };
-                                                setCloudConfig(prev => ({ ...prev, layers: newLayers }));
-                                            }}
-                                            className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs text-gray-400">Opacity</label>
+                                        <label className="text-xs text-gray-400">Height Offset (km)</label>
                                         <input
                                             type="number"
                                             step="0.1"
-                                            min="0"
-                                            max="1"
-                                            value={layer.opacity}
-                                            onChange={(e) => {
-                                                const newLayers = [...cloudConfig.layers];
-                                                newLayers[index] = { ...newLayers[index], opacity: parseFloat(e.target.value) || 0 };
-                                                setCloudConfig(prev => ({ ...prev, layers: newLayers }));
-                                            }}
+                                            value={cloudConfig.globalHeightOffset}
+                                            onChange={(e) => setCloudConfig(prev => ({ ...prev, globalHeightOffset: parseFloat(e.target.value) || 0 }))}
                                             className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs text-gray-400">Min Size</label>
-                                        <input
-                                            type="number"
-                                            step="5"
-                                            value={layer.minSize}
-                                            onChange={(e) => {
-                                                const newLayers = [...cloudConfig.layers];
-                                                newLayers[index] = { ...newLayers[index], minSize: parseInt(e.target.value) || 0 };
-                                                setCloudConfig(prev => ({ ...prev, layers: newLayers }));
-                                            }}
-                                            className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs text-gray-400">Max Size</label>
-                                        <input
-                                            type="number"
-                                            step="5"
-                                            value={layer.maxSize}
-                                            onChange={(e) => {
-                                                const newLayers = [...cloudConfig.layers];
-                                                newLayers[index] = { ...newLayers[index], maxSize: parseInt(e.target.value) || 0 };
-                                                setCloudConfig(prev => ({ ...prev, layers: newLayers }));
-                                            }}
-                                            className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs text-gray-400">Speed</label>
-                                        <input
-                                            type="number"
-                                            step="1"
-                                            value={layer.speed}
-                                            onChange={(e) => {
-                                                const newLayers = [...cloudConfig.layers];
-                                                newLayers[index] = { ...newLayers[index], speed: parseFloat(e.target.value) || 0 };
-                                                setCloudConfig(prev => ({ ...prev, layers: newLayers }));
-                                            }}
-                                            className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs text-gray-400">Color</label>
-                                        <input
-                                            type="color"
-                                            value={layer.color}
-                                            onChange={(e) => {
-                                                const newLayers = [...cloudConfig.layers];
-                                                newLayers[index] = { ...newLayers[index], color: e.target.value };
-                                                setCloudConfig(prev => ({ ...prev, layers: newLayers }));
-                                            }}
-                                            className="w-full mt-1 h-7 bg-black/30 border border-white/20 rounded cursor-pointer"
                                         />
                                     </div>
                                 </div>
                             </div>
-                        ))}
 
-                        <div className="flex justify-end gap-3 mt-4">
-                            <button
-                                onClick={() => setShowCloudDialog(false)}
-                                className="px-4 py-2 rounded-md text-sm font-medium bg-gray-700 text-gray-300 hover:bg-gray-600"
-                            >
-                                Close
-                            </button>
+                            {/* Layer Settings */}
+                            {cloudConfig.layers.map((layer, index) => (
+                                <div key={index} className="mb-4 p-4 bg-white/5 rounded-lg border border-white/10">
+                                    <h3 className="text-sm font-semibold text-cyan-300 mb-3">Layer {index + 1}</h3>
+                                    <div className="grid grid-cols-4 gap-3">
+                                        <div>
+                                            <label className="text-xs text-gray-400">Min Alt (km)</label>
+                                            <input
+                                                type="number"
+                                                step="0.5"
+                                                value={layer.minAlt}
+                                                onChange={(e) => {
+                                                    const newLayers = [...cloudConfig.layers];
+                                                    newLayers[index] = { ...newLayers[index], minAlt: parseFloat(e.target.value) || 0 };
+                                                    setCloudConfig(prev => ({ ...prev, layers: newLayers }));
+                                                }}
+                                                className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-gray-400">Max Alt (km)</label>
+                                            <input
+                                                type="number"
+                                                step="0.5"
+                                                value={layer.maxAlt}
+                                                onChange={(e) => {
+                                                    const newLayers = [...cloudConfig.layers];
+                                                    newLayers[index] = { ...newLayers[index], maxAlt: parseFloat(e.target.value) || 0 };
+                                                    setCloudConfig(prev => ({ ...prev, layers: newLayers }));
+                                                }}
+                                                className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-gray-400">Count</label>
+                                            <input
+                                                type="number"
+                                                step="10"
+                                                value={layer.count}
+                                                onChange={(e) => {
+                                                    const newLayers = [...cloudConfig.layers];
+                                                    newLayers[index] = { ...newLayers[index], count: parseInt(e.target.value) || 0 };
+                                                    setCloudConfig(prev => ({ ...prev, layers: newLayers }));
+                                                }}
+                                                className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-gray-400">Opacity</label>
+                                            <input
+                                                type="number"
+                                                step="0.1"
+                                                min="0"
+                                                max="1"
+                                                value={layer.opacity}
+                                                onChange={(e) => {
+                                                    const newLayers = [...cloudConfig.layers];
+                                                    newLayers[index] = { ...newLayers[index], opacity: parseFloat(e.target.value) || 0 };
+                                                    setCloudConfig(prev => ({ ...prev, layers: newLayers }));
+                                                }}
+                                                className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-gray-400">Min Size</label>
+                                            <input
+                                                type="number"
+                                                step="5"
+                                                value={layer.minSize}
+                                                onChange={(e) => {
+                                                    const newLayers = [...cloudConfig.layers];
+                                                    newLayers[index] = { ...newLayers[index], minSize: parseInt(e.target.value) || 0 };
+                                                    setCloudConfig(prev => ({ ...prev, layers: newLayers }));
+                                                }}
+                                                className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-gray-400">Max Size</label>
+                                            <input
+                                                type="number"
+                                                step="5"
+                                                value={layer.maxSize}
+                                                onChange={(e) => {
+                                                    const newLayers = [...cloudConfig.layers];
+                                                    newLayers[index] = { ...newLayers[index], maxSize: parseInt(e.target.value) || 0 };
+                                                    setCloudConfig(prev => ({ ...prev, layers: newLayers }));
+                                                }}
+                                                className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-gray-400">Speed</label>
+                                            <input
+                                                type="number"
+                                                step="1"
+                                                value={layer.speed}
+                                                onChange={(e) => {
+                                                    const newLayers = [...cloudConfig.layers];
+                                                    newLayers[index] = { ...newLayers[index], speed: parseFloat(e.target.value) || 0 };
+                                                    setCloudConfig(prev => ({ ...prev, layers: newLayers }));
+                                                }}
+                                                className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-xs"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-gray-400">Color</label>
+                                            <input
+                                                type="color"
+                                                value={layer.color}
+                                                onChange={(e) => {
+                                                    const newLayers = [...cloudConfig.layers];
+                                                    newLayers[index] = { ...newLayers[index], color: e.target.value };
+                                                    setCloudConfig(prev => ({ ...prev, layers: newLayers }));
+                                                }}
+                                                className="w-full mt-1 h-7 bg-black/30 border border-white/20 rounded cursor-pointer"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+
+                            <div className="flex justify-end gap-3 mt-4">
+                                <button
+                                    onClick={() => setShowCloudDialog(false)}
+                                    className="px-4 py-2 rounded-md text-sm font-medium bg-gray-700 text-gray-300 hover:bg-gray-600"
+                                >
+                                    Close
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Contour Configuration Dialog */}
-            {showContourDialog && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <div className="bg-gray-900/95 border border-white/20 rounded-xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto shadow-2xl">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-xl font-bold text-amber-400">📊 Contour Configuration</h2>
-                            <button
-                                onClick={() => setShowContourDialog(false)}
-                                className="text-gray-400 hover:text-white text-2xl leading-none"
-                            >
-                                ×
-                            </button>
-                        </div>
-
-                        <div className="space-y-4">
-                            <label className="flex items-center gap-2 text-sm text-gray-300">
-                                <input
-                                    type="checkbox"
-                                    checked={contourConfig.enabled}
-                                    onChange={(e) => setContourConfig(prev => ({ ...prev, enabled: e.target.checked }))}
-                                    className="accent-amber-500"
-                                />
-                                Enable Contour Lines
-                            </label>
-
-                            <div>
-                                <label className="text-xs text-gray-400">Minor Interval (m)</label>
-                                <input
-                                    type="number"
-                                    step="5"
-                                    value={contourConfig.interval}
-                                    onChange={(e) => setContourConfig(prev => ({ ...prev, interval: parseInt(e.target.value) || 20 }))}
-                                    className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
-                                />
+            {
+                showContourDialog && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                        <div className="bg-gray-900/95 border border-white/20 rounded-xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto shadow-2xl">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-xl font-bold text-amber-400">📊 Contour Configuration</h2>
+                                <button
+                                    onClick={() => setShowContourDialog(false)}
+                                    className="text-gray-400 hover:text-white text-2xl leading-none"
+                                >
+                                    ×
+                                </button>
                             </div>
 
-                            <div>
-                                <label className="text-xs text-gray-400">Major Interval (m)</label>
-                                <input
-                                    type="number"
-                                    step="10"
-                                    value={contourConfig.majorInterval}
-                                    onChange={(e) => setContourConfig(prev => ({ ...prev, majorInterval: parseInt(e.target.value) || 100 }))}
-                                    className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
-                                />
-                            </div>
-
-                            <label className="flex items-center gap-2 text-sm text-gray-300">
-                                <input
-                                    type="checkbox"
-                                    checked={contourConfig.showLabels}
-                                    onChange={(e) => setContourConfig(prev => ({ ...prev, showLabels: e.target.checked }))}
-                                    className="accent-amber-500"
-                                />
-                                Show Labels
-                            </label>
-
-                            <div>
-                                <label className="text-xs text-gray-400">Minor Line Opacity: {contourConfig.minorOpacity.toFixed(2)}</label>
-                                <input
-                                    type="range"
-                                    min="0"
-                                    max="1"
-                                    step="0.1"
-                                    value={contourConfig.minorOpacity}
-                                    onChange={(e) => setContourConfig(prev => ({ ...prev, minorOpacity: parseFloat(e.target.value) }))}
-                                    className="w-full mt-1 accent-amber-500"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="text-xs text-gray-400">Major Line Opacity: {contourConfig.majorOpacity.toFixed(2)}</label>
-                                <input
-                                    type="range"
-                                    min="0"
-                                    max="1"
-                                    step="0.1"
-                                    value={contourConfig.majorOpacity}
-                                    onChange={(e) => setContourConfig(prev => ({ ...prev, majorOpacity: parseFloat(e.target.value) }))}
-                                    className="w-full mt-1 accent-amber-500"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="flex justify-end gap-3 mt-4">
-                            <button
-                                onClick={() => setShowContourDialog(false)}
-                                className="px-4 py-2 rounded-md text-sm font-medium bg-gray-700 text-gray-300 hover:bg-gray-600"
-                            >
-                                Close
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Fire Configuration Dialog */}
-            {showFireDialog && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <div className="bg-gray-900/95 border border-white/20 rounded-xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto shadow-2xl">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-xl font-bold text-orange-400">🔥 Fire Configuration</h2>
-                            <button
-                                onClick={() => setShowFireDialog(false)}
-                                className="text-gray-400 hover:text-white text-2xl leading-none"
-                            >
-                                ×
-                            </button>
-                        </div>
-
-                        <div className="space-y-4">
-                            <label className="flex items-center gap-2 text-sm text-gray-300">
-                                <input
-                                    type="checkbox"
-                                    checked={fireConfig.enabled}
-                                    onChange={(e) => setFireConfig(prev => ({ ...prev, enabled: e.target.checked }))}
-                                    className="accent-orange-500"
-                                />
-                                Enable Fire Effects
-                            </label>
-
-                            <div>
-                                <label className="text-xs text-gray-400">Fire Height</label>
-                                <input
-                                    type="number"
-                                    step="0.5"
-                                    value={fireConfig.height}
-                                    onChange={(e) => setFireConfig(prev => ({ ...prev, height: parseFloat(e.target.value) || 2 }))}
-                                    className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="text-xs text-gray-400">Height Offset (m)</label>
-                                <input
-                                    type="number"
-                                    step="1"
-                                    value={fireConfig.heightOffset}
-                                    onChange={(e) => setFireConfig(prev => ({ ...prev, heightOffset: parseFloat(e.target.value) || 0 }))}
-                                    className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="text-xs text-gray-400">Fire Spread</label>
-                                <input
-                                    type="number"
-                                    step="0.1"
-                                    value={fireConfig.spread}
-                                    onChange={(e) => setFireConfig(prev => ({ ...prev, spread: parseFloat(e.target.value) || 0.5 }))}
-                                    className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
-                                />
-                            </div>
-
-                            <div className="border-t border-white/10 pt-4 mt-4">
-                                <h3 className="text-sm font-semibold text-orange-300 mb-3">Performance Settings</h3>
+                            <div className="space-y-4">
+                                <label className="flex items-center gap-2 text-sm text-gray-300">
+                                    <input
+                                        type="checkbox"
+                                        checked={contourConfig.enabled}
+                                        onChange={(e) => setContourConfig(prev => ({ ...prev, enabled: e.target.checked }))}
+                                        className="accent-amber-500"
+                                    />
+                                    Enable Contour Lines
+                                </label>
 
                                 <div>
-                                    <label className="text-xs text-gray-400">Iterations (8-20, lower = faster)</label>
+                                    <label className="text-xs text-gray-400">Minor Interval (m)</label>
                                     <input
                                         type="number"
-                                        min="4"
-                                        max="30"
-                                        step="2"
-                                        value={fireConfig.iterations}
-                                        onChange={(e) => setFireConfig(prev => ({ ...prev, iterations: parseInt(e.target.value) || 10 }))}
+                                        step="5"
+                                        value={contourConfig.interval}
+                                        onChange={(e) => setContourConfig(prev => ({ ...prev, interval: parseInt(e.target.value) || 20 }))}
                                         className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
                                     />
                                 </div>
 
-                                <div className="mt-3">
-                                    <label className="text-xs text-gray-400">Octaves (1-3, lower = faster)</label>
+                                <div>
+                                    <label className="text-xs text-gray-400">Major Interval (m)</label>
                                     <input
                                         type="number"
-                                        min="1"
-                                        max="4"
-                                        step="1"
-                                        value={fireConfig.octaves}
-                                        onChange={(e) => setFireConfig(prev => ({ ...prev, octaves: parseInt(e.target.value) || 2 }))}
+                                        step="10"
+                                        value={contourConfig.majorInterval}
+                                        onChange={(e) => setContourConfig(prev => ({ ...prev, majorInterval: parseInt(e.target.value) || 100 }))}
                                         className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
+                                    />
+                                </div>
+
+                                <label className="flex items-center gap-2 text-sm text-gray-300">
+                                    <input
+                                        type="checkbox"
+                                        checked={contourConfig.showLabels}
+                                        onChange={(e) => setContourConfig(prev => ({ ...prev, showLabels: e.target.checked }))}
+                                        className="accent-amber-500"
+                                    />
+                                    Show Labels
+                                </label>
+
+                                <div>
+                                    <label className="text-xs text-gray-400">Minor Line Opacity: {contourConfig.minorOpacity.toFixed(2)}</label>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="1"
+                                        step="0.1"
+                                        value={contourConfig.minorOpacity}
+                                        onChange={(e) => setContourConfig(prev => ({ ...prev, minorOpacity: parseFloat(e.target.value) }))}
+                                        className="w-full mt-1 accent-amber-500"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="text-xs text-gray-400">Major Line Opacity: {contourConfig.majorOpacity.toFixed(2)}</label>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max="1"
+                                        step="0.1"
+                                        value={contourConfig.majorOpacity}
+                                        onChange={(e) => setContourConfig(prev => ({ ...prev, majorOpacity: parseFloat(e.target.value) }))}
+                                        className="w-full mt-1 accent-amber-500"
                                     />
                                 </div>
                             </div>
-                        </div>
 
-                        <div className="flex justify-end gap-3 mt-4">
-                            <button
-                                onClick={() => setShowFireDialog(false)}
-                                className="px-4 py-2 rounded-md text-sm font-medium bg-gray-700 text-gray-300 hover:bg-gray-600"
-                            >
-                                Close
-                            </button>
+                            <div className="flex justify-end gap-3 mt-4">
+                                <button
+                                    onClick={() => setShowContourDialog(false)}
+                                    className="px-4 py-2 rounded-md text-sm font-medium bg-gray-700 text-gray-300 hover:bg-gray-600"
+                                >
+                                    Close
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
+
+            {/* Fire Configuration Dialog */}
+            {
+                showFireDialog && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                        <div className="bg-gray-900/95 border border-white/20 rounded-xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto shadow-2xl">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-xl font-bold text-orange-400">🔥 Fire Configuration</h2>
+                                <button
+                                    onClick={() => setShowFireDialog(false)}
+                                    className="text-gray-400 hover:text-white text-2xl leading-none"
+                                >
+                                    ×
+                                </button>
+                            </div>
+
+                            <div className="space-y-4">
+                                <label className="flex items-center gap-2 text-sm text-gray-300">
+                                    <input
+                                        type="checkbox"
+                                        checked={fireConfig.enabled}
+                                        onChange={(e) => setFireConfig(prev => ({ ...prev, enabled: e.target.checked }))}
+                                        className="accent-orange-500"
+                                    />
+                                    Enable Fire Effects
+                                </label>
+
+                                <div>
+                                    <label className="text-xs text-gray-400">Fire Height</label>
+                                    <input
+                                        type="number"
+                                        step="0.5"
+                                        value={fireConfig.height}
+                                        onChange={(e) => setFireConfig(prev => ({ ...prev, height: parseFloat(e.target.value) || 2 }))}
+                                        className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="text-xs text-gray-400">Height Offset (m)</label>
+                                    <input
+                                        type="number"
+                                        step="1"
+                                        value={fireConfig.heightOffset}
+                                        onChange={(e) => setFireConfig(prev => ({ ...prev, heightOffset: parseFloat(e.target.value) || 0 }))}
+                                        className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="text-xs text-gray-400">Fire Spread</label>
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        value={fireConfig.spread}
+                                        onChange={(e) => setFireConfig(prev => ({ ...prev, spread: parseFloat(e.target.value) || 0.5 }))}
+                                        className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
+                                    />
+                                </div>
+
+                                <div className="border-t border-white/10 pt-4 mt-4">
+                                    <h3 className="text-sm font-semibold text-orange-300 mb-3">Performance Settings</h3>
+
+                                    <div>
+                                        <label className="text-xs text-gray-400">Iterations (8-20, lower = faster)</label>
+                                        <input
+                                            type="number"
+                                            min="4"
+                                            max="30"
+                                            step="2"
+                                            value={fireConfig.iterations}
+                                            onChange={(e) => setFireConfig(prev => ({ ...prev, iterations: parseInt(e.target.value) || 10 }))}
+                                            className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
+                                        />
+                                    </div>
+
+                                    <div className="mt-3">
+                                        <label className="text-xs text-gray-400">Octaves (1-3, lower = faster)</label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            max="4"
+                                            step="1"
+                                            value={fireConfig.octaves}
+                                            onChange={(e) => setFireConfig(prev => ({ ...prev, octaves: parseInt(e.target.value) || 2 }))}
+                                            className="w-full mt-1 px-2 py-1 bg-black/30 border border-white/20 rounded text-white text-sm"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end gap-3 mt-4">
+                                <button
+                                    onClick={() => setShowFireDialog(false)}
+                                    className="px-4 py-2 rounded-md text-sm font-medium bg-gray-700 text-gray-300 hover:bg-gray-600"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
 
             <Canvas
                 shadows
@@ -706,6 +748,7 @@ function App() {
                 performance={{ min: 0.5 }}
                 frameloop="always"
             >
+                <PivotSetter isInteracting={isInteracting} controlsRef={controlsRef} />
                 {/* Atmosphere & Lighting */}
                 {/* <fog attach="fog" args={[fogColor, fogNear, fogFar]} /> */}
                 <ambientLight intensity={ambientIntensity} />
